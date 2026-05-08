@@ -62,8 +62,7 @@ The repository includes several prepared datasets:
 ### 1) Clone the repository
 
 ```bash
-git clone https://github.com/<your-username>/Career-Recommendation-System.git
-cd Career-Recommendation-System
+git clone Career-Recommendation-System](https://github.com/danialyermekov/Career-Recommendation-System.git)
 ```
 
 ### 2) Set up and run backend
@@ -164,5 +163,5 @@ From repository result files:
 
 ## Author
 
-- **Name:** *Your Name*
-- **GitHub:** [@your-github-username](https://github.com/your-github-username)
+- **Name:** Danial Yermekov
+- **GitHub:** https://github.com/danialyermekov
