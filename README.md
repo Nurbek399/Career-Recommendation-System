@@ -132,7 +132,7 @@ Career-Recommendation-System/
 └── ml/
     ├── classification/            # Career-classification experimentation pipeline
     ├── demand prediction/         # Vacancy demand forecasting experiments
-    └──  skills and courses/       # Skill taxonomy, matching, roadmap/course modules
+    └── skills and courses/         # Skill taxonomy, matching, roadmap/course modules
 ```
 
 ## Results / Metrics
