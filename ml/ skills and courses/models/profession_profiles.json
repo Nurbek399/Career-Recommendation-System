@@ -1,0 +1,421 @@
+{
+    "Data Analyst": {
+        "programming": [
+            "sql",
+            "python",
+            "r",
+            "go",
+            "vba"
+        ],
+        "analyst_tools": [
+            "excel",
+            "tableau",
+            "sas",
+            "sap",
+            "alteryx"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront",
+            "microsoft lists"
+        ],
+        "cloud": [
+            "azure",
+            "oracle",
+            "snowflake",
+            "firebase",
+            "vmware"
+        ],
+        "libraries": [
+            "spark",
+            "pandas",
+            "airflow",
+            "gdpr",
+            "numpy"
+        ],
+        "databases": [
+            "sql server",
+            "mongodb",
+            "elasticsearch",
+            "neo4j",
+            "redis"
+        ],
+        "webframeworks": [
+            "flask"
+        ],
+        "other": [
+            "git",
+            "github",
+            "docker",
+            "kubernetes",
+            "chef"
+        ],
+        "sync": [
+            "slack",
+            "symphony",
+            "twilio"
+        ]
+    },
+    "Data Engineer": {
+        "programming": [
+            "sql",
+            "python",
+            "java",
+            "scala",
+            "no-sql"
+        ],
+        "analyst_tools": [
+            "tableau",
+            "ssis",
+            "excel",
+            "sap",
+            "sas"
+        ],
+        "cloud": [
+            "aws",
+            "snowflake",
+            "oracle",
+            "vmware",
+            "colocation"
+        ],
+        "libraries": [
+            "spark",
+            "kafka",
+            "airflow",
+            "pandas",
+            "numpy"
+        ],
+        "other": [
+            "git",
+            "docker",
+            "kubernetes",
+            "terraform",
+            "jenkins"
+        ],
+        "databases": [
+            "sql server",
+            "mongodb",
+            "cassandra",
+            "redis",
+            "neo4j"
+        ],
+        "webframeworks": [
+            "flask",
+            "play framework"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront",
+            "dingtalk"
+        ],
+        "sync": [
+            "slack",
+            "symphony",
+            "twilio"
+        ]
+    },
+    "Business Analyst": {
+        "programming": [
+            "sql",
+            "python",
+            "r",
+            "go",
+            "vba"
+        ],
+        "analyst_tools": [
+            "excel",
+            "powerbi",
+            "sap",
+            "sas",
+            "dax"
+        ],
+        "cloud": [
+            "azure",
+            "oracle",
+            "snowflake",
+            "vmware",
+            "watson"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront"
+        ],
+        "other": [
+            "git",
+            "kubernetes",
+            "docker",
+            "jenkins",
+            "terraform"
+        ],
+        "libraries": [
+            "spark",
+            "airflow",
+            "selenium",
+            "gdpr",
+            "pandas"
+        ],
+        "databases": [
+            "sql server",
+            "mongodb",
+            "cassandra",
+            "redis",
+            "neo4j"
+        ],
+        "webframeworks": [
+            "django"
+        ],
+        "sync": [
+            "slack",
+            "symphony",
+            "twilio"
+        ]
+    },
+    "Data Scientist": {
+        "programming": [
+            "python",
+            "sql",
+            "r",
+            "java",
+            "scala"
+        ],
+        "analyst_tools": [
+            "tableau",
+            "excel",
+            "sas",
+            "sap",
+            "alteryx"
+        ],
+        "cloud": [
+            "aws",
+            "databricks",
+            "oracle",
+            "watson",
+            "vmware"
+        ],
+        "databases": [
+            "sql server",
+            "mongodb",
+            "elasticsearch",
+            "neo4j",
+            "redis"
+        ],
+        "libraries": [
+            "spark",
+            "tensorflow",
+            "pandas",
+            "scikit-learn",
+            "numpy"
+        ],
+        "other": [
+            "git",
+            "docker",
+            "kubernetes",
+            "github",
+            "terraform"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront",
+            "wimi"
+        ],
+        "webframeworks": [
+            "flask",
+            "play framework"
+        ],
+        "sync": [
+            "slack",
+            "symphony",
+            "twilio"
+        ]
+    },
+    "Machine Learning Engineer": {
+        "programming": [
+            "python",
+            "sql",
+            "java",
+            "r",
+            "c++"
+        ],
+        "libraries": [
+            "pytorch",
+            "spark",
+            "scikit-learn",
+            "pandas",
+            "numpy"
+        ],
+        "other": [
+            "docker",
+            "kubernetes",
+            "git",
+            "terraform",
+            "github"
+        ],
+        "cloud": [
+            "aws",
+            "databricks",
+            "oracle",
+            "vmware",
+            "watson"
+        ],
+        "databases": [
+            "sql",
+            "mongodb",
+            "elasticsearch",
+            "redis",
+            "neo4j"
+        ],
+        "analyst_tools": [
+            "excel",
+            "tableau",
+            "sap",
+            "sas",
+            "ssis"
+        ],
+        "sync": [
+            "slack",
+            "twilio",
+            "symphony"
+        ],
+        "webframeworks": [
+            "flask",
+            "play framework"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner"
+        ]
+    },
+    "Cloud Engineer": {
+        "programming": [
+            "python",
+            "sql",
+            "java",
+            "go",
+            "javascript"
+        ],
+        "cloud": [
+            "aws",
+            "vmware",
+            "oracle",
+            "databricks",
+            "openstack"
+        ],
+        "libraries": [
+            "spark",
+            "kafka",
+            "react.js",
+            "airflow",
+            "gdpr"
+        ],
+        "webframeworks": [
+            "node.js",
+            "vue.js",
+            "django",
+            "angular.js",
+            "next.js"
+        ],
+        "databases": [
+            "sql server",
+            "mongodb",
+            "elasticsearch",
+            "redis",
+            "neo4j"
+        ],
+        "other": [
+            "terraform",
+            "kubernetes",
+            "docker",
+            "git",
+            "jenkins"
+        ],
+        "analyst_tools": [
+            "excel",
+            "tableau",
+            "sap",
+            "splunk",
+            "sharepoint"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront"
+        ],
+        "sync": [
+            "slack",
+            "symphony",
+            "twilio"
+        ]
+    },
+    "Software Engineer": {
+        "programming": [
+            "python",
+            "sql",
+            "java",
+            "go",
+            "javascript"
+        ],
+        "analyst_tools": [
+            "excel",
+            "tableau",
+            "sap",
+            "splunk",
+            "ssis"
+        ],
+        "cloud": [
+            "aws",
+            "oracle",
+            "snowflake",
+            "vmware",
+            "openstack"
+        ],
+        "other": [
+            "kubernetes",
+            "docker",
+            "git",
+            "terraform",
+            "jenkins"
+        ],
+        "databases": [
+            "sql",
+            "mongodb",
+            "redis",
+            "elasticsearch",
+            "neo4j"
+        ],
+        "webframeworks": [
+            "node.js",
+            "django",
+            "vue.js",
+            "next.js",
+            "play framework"
+        ],
+        "libraries": [
+            "spark",
+            "kafka",
+            "react.js",
+            "spring",
+            "airflow"
+        ],
+        "async": [
+            "jira",
+            "confluence",
+            "planner",
+            "workfront"
+        ],
+        "sync": [
+            "slack",
+            "twilio",
+            "symphony"
+        ]
+    }
+}
