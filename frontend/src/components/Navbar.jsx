@@ -30,10 +30,10 @@ export default function Navbar({ onLogoClick }) {
       <div className={styles.inner}>
         <button className={styles.logo} onClick={onLogoClick}>
           <span className={styles.logoMark}><LogoMark /></span>
-          <span className={styles.logoText}>Build Career</span>
+          <span className={styles.logoText}>{t.nav.title}</span>
         </button>
         <div className={styles.actions}>
-          <button className={styles.iconBtn} onClick={toggleTheme} title="Toggle theme">
+          <button className={styles.iconBtn} onClick={toggleTheme} title={t.nav.themeToggle || t.nav.theme}>
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
           <button className={styles.langBtn} onClick={toggleLang}>{t.nav.lang}</button>

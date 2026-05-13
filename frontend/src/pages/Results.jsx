@@ -32,9 +32,26 @@ const BAR_TOOLTIPS = {
     trend_score:   'Market demand trend for this profession',
     market_share:  'Vacancy market share occupied by this profession',
   },
+  kk: {
+    skill_match:   'Техникалық дағдыларыңыз мамандық талаптарына қаншалықты сәйкес келеді',
+    profile_match: 'Жалпы профиліңіз осы мансап бағытына қаншалықты сәйкес келеді',
+    trend_score:   'Бұл мамандық бойынша нарық сұранысының тренді',
+    market_share:  'Бұл мамандықтың вакансиялар нарығындағы үлесі',
+  },
 }
 
 const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s
+
+const detectCourseLanguage = course => {
+  const text = `${course?.title || ''} ${course?.description || ''}`
+  return /[А-Яа-яЁёӘәҒғҚқҢңӨөҰұҮүҺһІі]/.test(text) ? 'ru' : 'en'
+}
+
+const preferredCourseLanguage = lang => lang === 'en' ? 'en' : 'ru'
+const filterCoursesByLanguage = (courses = [], lang) => {
+  const preferred = courses.filter(course => detectCourseLanguage(course) === preferredCourseLanguage(lang))
+  return preferred.length ? preferred : courses
+}
 
 const ChevronIcon = ({ dir = 'left' }) => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
@@ -119,6 +136,7 @@ function RadarChart({ data, animKey, lang }) {
   const RADAR_TOOLTIPS = {
     ru: { skill_match: 'Навыки', profile_match: 'Профиль', trend_score: 'Тренд', market_share: 'Рынок' },
     en: { skill_match: 'Skills', profile_match: 'Profile', trend_score: 'Trend', market_share: 'Market' },
+    kk: { skill_match: 'Дағдылар', profile_match: 'Профиль', trend_score: 'Тренд', market_share: 'Нарық' },
   }
   const tips = RADAR_TOOLTIPS[lang] || RADAR_TOOLTIPS.en
 
@@ -323,7 +341,6 @@ const SKILL_IMPLIES = {
 function SkillGapRadar({ results, formData, animKey, lang }) {
   const [tooltip, setTooltip] = useState(null)
   const [opacity, setOpacity]  = useState(0)
-  console.log('=== GAP RADAR formData ===', JSON.stringify(formData))
   useEffect(() => {
     setOpacity(0)
     const t = setTimeout(() => setOpacity(1), 60)
@@ -423,6 +440,11 @@ while (changed) {
 
   const knownCount = studentValues.filter(v => v === 1.0).length
   const totalCount = axes.length
+  const text = {
+    ru: { known: 'навыков уже есть', youKnow: 'Знаете', toLearn: 'Нужно изучить' },
+    en: { known: 'skills already known', youKnow: 'You know', toLearn: 'To learn' },
+    kk: { known: 'дағды бар', youKnow: 'Білесің', toLearn: 'Үйрену керек' },
+  }[lang] || { known: 'skills already known', youKnow: 'You know', toLearn: 'To learn' }
 
   return (
     <div style={{ position: 'relative', display: 'inline-block', flexShrink: 0 }}>
@@ -434,7 +456,7 @@ while (changed) {
       }}>
         <span style={{ color: '#4caf82', fontWeight: 700 }}>{knownCount}</span>
         {' / '}{totalCount}{' '}
-        {lang === 'ru' ? 'навыков уже есть' : 'skills already known'}
+        {text.known}
       </div>
 
       <svg width={size} height={size} viewBox={`-40 -40 ${size + 80} ${size + 80}`}
@@ -497,13 +519,13 @@ while (changed) {
         <g transform={`translate(${cx - 85}, ${size + 18})`}>
           <circle cx="5" cy="5" r="4" fill="#5b8dee" />  {/* ← was #4caf82, became blue */}
           <text x="14" y="9" fontSize="10" fill="var(--text-2)" fontFamily="var(--font-mono)">
-            {lang === 'ru' ? 'Знаете' : 'You know'}
+            {text.youKnow}
           </text>
         </g>
         <g transform={`translate(${cx + 20}, ${size + 18})`}>
           <circle cx="5" cy="5" r="4" fill="#4caf82" />
           <text x="14" y="9" fontSize="10" fill="var(--text-2)" fontFamily="var(--font-mono)">
-            {lang === 'ru' ? 'Нужно изучить' : 'To learn'}
+            {text.toLearn}
           </text>
         </g>
       </svg>
@@ -553,7 +575,8 @@ function MetricBars({ data, rows, animKey, lang }) {
 }
 
 /* ─── Score Rows ─────────────────────────────────────────────── */
-function ProfScores({ p, rows, animKey }) {
+function ProfScores({ p, rows, animKey, lang }) {
+  const tips = BAR_TOOLTIPS[lang] || BAR_TOOLTIPS.en
   return (
     <div className={styles.profScores}>
       {rows.map(({ key, label, max }) =>
@@ -565,7 +588,7 @@ function ProfScores({ p, rows, animKey }) {
               max={max}
               color={BAR_COLORS[key]}
               animKey={animKey}
-              tooltipText={BAR_TOOLTIPS[key]}
+              tooltipText={tips[key]}
             />
           </div>
         ) : null
@@ -625,7 +648,7 @@ const stripMarkdown = text => text
   .trim()
 
 /* ─── Course description modal ───────────────────────────────── */
-function CourseModal({ course, onClose }) {
+function CourseModal({ course, onClose, t }) {
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose() }
     window.addEventListener('keydown', handler)
@@ -652,11 +675,11 @@ function CourseModal({ course, onClose }) {
         {course.description ? (
           <p className={styles.modalDesc}>{course.description}</p>
         ) : (
-          <p className={styles.modalDescEmpty}>No description available.</p>
+          <p className={styles.modalDescEmpty}>{t.results.noDescription}</p>
         )}
         {course.url && (
           <a href={course.url} target="_blank" rel="noopener noreferrer" className={styles.modalLink}>
-            Open course →
+            {t.results.openCourse} →
           </a>
         )}
       </div>
@@ -665,18 +688,18 @@ function CourseModal({ course, onClose }) {
 }
 
 /* ─── Deep Mode Button ───────────────────────────────────────── */
-function DeepModeBtn({ active, onClick, lang }) {
+function DeepModeBtn({ active, onClick, lang, t }) {
   return (
     <button
       className={`${styles.deepModeBtn} ${active ? styles.deepModeBtnActive : ''}`}
       onClick={onClick}
-      title={active ? (lang === 'ru' ? 'Выключить расширенный анализ' : 'Disable deep analysis') : (lang === 'ru' ? 'Включить расширенный анализ' : 'Enable deep analysis')}
+      title={active ? t.results.disableDeep : t.results.enableDeep}
     >
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
         <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6L15 21H9l-.3-5.9A7 7 0 0 1 5 9a7 7 0 0 1 7-7z"/>
         <line x1="9" y1="21" x2="15" y2="21"/>
       </svg>
-      <span>{lang === 'ru' ? 'Думать' : 'Thinking'}</span>
+      <span>{t.results.thinking}</span>
       {active && (
         <span className={styles.deepModePulse}/>
       )}
@@ -713,6 +736,9 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
 
   const top_profession = results.top_profession
   const rawRoadmap     = results.roadmap_with_courses
+  const profLabel = name => t.professions?.[name] || name
+  const catLabel = cat => t.categories?.[cat] || cat.replace(/_/g, ' ')
+  const skillWord = n => t.results.skillWord ? t.results.skillWord(n) : `${n} skills`
 
   const ALL_SCORE_ROWS = [
     { key: 'skill_match',   label: t.results.skillMatch,      sortKey: 'skill',   max: 1   },
@@ -761,7 +787,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   const activeProf     = sorted.find(p => p.name === activeProfName) || sorted[0]
 
   const roadmapAdapted = Object.fromEntries(
-    Object.entries(rawRoadmap).map(([cat, skills]) => [
+    Object.entries(rawRoadmap || {}).map(([cat, skills]) => [
       cat,
       Object.entries(skills).map(([skill, data]) => ({
         skill,
@@ -808,9 +834,9 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   useEffect(() => {
     if (greetedRef.current) return
     greetedRef.current = true
-    const staticMsg = lang === 'en'
-      ? `Your top match is ${top_profession}. Use the chat below to ask anything about your results, roadmap, or next steps.`
-      : `Ваша лучшая профессия — ${top_profession}. Задайте вопрос о результатах, роадмапе или следующих шагах.`
+    const staticMsg = t.results.initialChat
+      ? t.results.initialChat(profLabel(top_profession))
+      : `Your top match is ${profLabel(top_profession)}.`
     setMessages([{ role: 'assistant', content: staticMsg, streaming: false }])
   }, [])
 
@@ -921,19 +947,19 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   const handleCopyRoadmap = () => {
     const lines = []
     Object.entries(roadmapAdapted).forEach(([cat, skills]) => {
-      lines.push(cat.toUpperCase())
+      lines.push(catLabel(cat).toUpperCase())
       skills.forEach(s => {
         lines.push(`  - ${cap(s.skill)}`)
         s.courses.forEach(c => lines.push(`    ${c.title} (${c.platform})`))
       })
     })
-    copyText(`Career Roadmap: ${top_profession}\n\n` + lines.join('\n'))
+    copyText(`Career Roadmap: ${profLabel(top_profession)}\n\n` + lines.join('\n'))
     setCopied('roadmap')
     setTimeout(() => setCopied(null), 2000)
   }
 
   const handleShare = () => {
-    const text = `My career match: ${top_profession} ${activeProf?.final_score ? Math.round(activeProf.final_score * 100) + '%' : ''} — Build Career`
+    const text = `My career match: ${profLabel(top_profession)} ${activeProf?.final_score ? Math.round(activeProf.final_score * 100) + '%' : ''} — Build Career`
     if (navigator.share) {
       navigator.share({ title: 'Build Career', text }).catch(() => {})
     } else {
@@ -966,14 +992,10 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
       </div>
     </div>`).join('')
 
-  const skillWord = (n) => lang === 'ru'
-    ? `${n} ${n === 1 ? 'навык' : n < 5 ? 'навыка' : 'навыков'}`
-    : `${n} ${n === 1 ? 'skill' : 'skills'}`
-
   const roadmapSections = Object.entries(roadmapAdapted).map(([cat, skills]) =>
     `<div class="rm-section">
       <div class="rm-cat">
-        <span>${cat.replace(/_/g, ' ').toUpperCase()}</span>
+        <span>${catLabel(cat).toUpperCase()}</span>
         <span class="rm-count">${skillWord(skills.length)}</span>
       </div>
       ${skills.map(s => `<div class="rm-skill">
@@ -985,7 +1007,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
               ? `<span class="rm-rating">★ ${parseFloat(c.rating).toFixed(1)}</span>`
               : ''
             const reviews = c.reviews && Number(c.reviews) > 10
-              ? `<span class="rm-reviews">${Number(c.reviews).toLocaleString()} ${lang === 'ru' ? 'отзывов' : 'reviews'}</span>`
+              ? `<span class="rm-reviews">${Number(c.reviews).toLocaleString()} ${t.results.reviews}</span>`
               : ''
             return `<div class="rm-course">
               <span class="rm-platform">${clean(c.platform)}</span>
@@ -1002,11 +1024,11 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   // Username from formData
   const userName = formData?.name || formData?.fullName || ''
   const headerSub = userName
-    ? `${lang === 'ru' ? 'для' : 'for'} ${userName} · ${new Date().toLocaleDateString()}`
+    ? `${t.results.pdfFor} ${userName} · ${new Date().toLocaleDateString()}`
     : new Date().toLocaleDateString()
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Career Roadmap: ${top_profession}</title>
+  <title>Career Roadmap: ${profLabel(top_profession)}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,Segoe UI,sans-serif;color:#1e1e1c;font-size:13px;line-height:1.5}
@@ -1046,11 +1068,11 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
       <span class="header-sub">${headerSub}</span>
     </div>
     <div class="body">
-      <div class="prof-name">${top_profession}</div>
-      <div class="prof-sub">${lang === 'ru' ? 'Персональный план обучения на основе вашего профиля' : 'Personalized learning roadmap based on your profile'}</div>
-      <div class="section-title">${lang === 'ru' ? 'Ваши показатели' : 'Your scores'}</div>
+      <div class="prof-name">${profLabel(top_profession)}</div>
+      <div class="prof-sub">${t.results.pdfSubtitle}</div>
+      <div class="section-title">${t.results.pdfScores}</div>
       <div class="scores">${scoreLines}</div>
-      <div class="section-title">${lang === 'ru' ? 'План обучения' : 'Learning roadmap'}</div>
+      <div class="section-title">${t.results.pdfRoadmap}</div>
       ${roadmapSections}
       <div class="footer">Generated by Build Career · buildcareer.app</div>
     </div>
@@ -1102,7 +1124,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
 
         <div className={styles.sidebarSection}>
           <div className={styles.sidebarLabel}>{t.results.sidebarLabels.recommendation}</div>
-          <div className={styles.sidebarProfession}>{activeProfName}</div>
+          <div className={styles.sidebarProfession}>{profLabel(activeProfName)}</div>
           {activeProf?.final_score != null && (
             <div style={{ marginTop: 8 }}>
               <ProgressRing value={activeProf.final_score} size={56} stroke={4} color="var(--accent)" animKey={animKey}/>
@@ -1119,7 +1141,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                   className={`${styles.sidebarScoreRow} ${p.name === activeProfName ? styles.sidebarScoreRowActive : ''}`}
                   onClick={() => handleSelectProf(p.name)}
                 >
-                  <span className={styles.sidebarScoreKey}>{p.name}</span>
+                  <span className={styles.sidebarScoreKey}>{profLabel(p.name)}</span>
                   <span className={styles.sidebarScoreVal}>
                     {typeof p.final_score === 'number' ? Math.round(p.final_score * 100) + '%' : '—'}
                   </span>
@@ -1137,7 +1159,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                 <div key={cat} className={styles.roadmapPreviewItem} onClick={() => setTab('roadmap')}>
                   <span className={styles.roadmapPreviewIcon}>{CATEGORY_ICONS[cat] || '◎'}</span>
                   <div className={styles.roadmapPreviewBody}>
-                    <span className={styles.roadmapPreviewCat}>{cat.replace(/_/g, ' ')}</span>
+                    <span className={styles.roadmapPreviewCat}>{catLabel(cat)}</span>
                     <span className={styles.roadmapPreviewSkill}>{skill}{count > 1 ? ` +${count - 1}` : ''}</span>
                   </div>
                 </div>
@@ -1206,7 +1228,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                       color="#5b8dee" animKey={animKey}/>
                     <div>
                       <div className={styles.bestRank}>#{1} {t.results.bestMatch}</div>
-                      <div className={styles.bestName}>{activeProf.name}</div>
+                      <div className={styles.bestName}>{profLabel(activeProf.name)}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
@@ -1221,7 +1243,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                           fontSize: '0.7rem', fontFamily: 'var(--font-mono)',
                           cursor: 'pointer', transition: 'all var(--transition)',
                         }}>
-                          {m === 'bars' ? 'Bars' : m === 'radar' ? 'Radar' : (lang === 'ru' ? 'Разрыв' : 'Gap')}
+                          {t.results.chartModes?.[m] || m}
                         </button>
                       ))}
                     </div>
@@ -1240,9 +1262,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                 {viewMode === 'gap' && (
                   <div style={{ padding: '16px 0 8px' }}>
                     <p style={{ fontSize: '0.78rem', color: 'var(--text-3)', fontFamily: 'var(--font-mono)', marginBottom: 12 }}>
-                      {lang === 'ru'
-                        ? 'Синий — ваши навыки, зеленый — эталон профессии'
-                        : 'Blue — your skills, green — profession ideal'}
+                      {t.results.gapLegend}
                     </p>
                     <div style={{
                         display: 'flex', gap: 24, alignItems: 'center',
@@ -1290,7 +1310,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                             color={BAR_COLORS.skill_match} animKey={aKey}/>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span className={styles.profRank}>#{i+1}</span>
-                            <span className={styles.profName}>{p.name}</span>
+                            <span className={styles.profName}>{profLabel(p.name)}</span>
                             {i === 0 && <span className={styles.topBadge}>{t.results.bestMatch.toUpperCase()}</span>}
                           </div>
                         </div>
@@ -1315,7 +1335,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
           {tab === 'roadmap' && (
   <>
     <p className={styles.roadmapHint}>
-      {t.results.skillsToLearn} <strong>{top_profession}</strong>
+      {t.results.skillsToLearn} <strong>{profLabel(top_profession)}</strong>
     </p>
     <div className={styles.roadmap}>
       {Object.entries(roadmapAdapted).map(([cat, skills]) => {
@@ -1334,8 +1354,8 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
           <div key={cat} className={styles.roadmapCat}>
             <button className={styles.catHeader} onClick={() => toggleCat(cat)}>
               <span className={styles.catIcon}>{CATEGORY_ICONS[cat] || '◎'}</span>
-              <span className={styles.catName}>{cat.replace(/_/g, ' ').toUpperCase()}</span>
-              <span className={styles.catCount}>{skills.length} skills</span>
+              <span className={styles.catName}>{catLabel(cat).toUpperCase()}</span>
+              <span className={styles.catCount}>{skillWord(skills.length)}</span>
               {/* progress inside category */}
               {doneCount > 0 && (
                 <span style={{
@@ -1354,10 +1374,12 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
               <div className={styles.skillList}>
                 {sorted.map((s, i) => {
                   const isDone = doneSkills.has(`${cat}::${s.skill}`)
+                  const visibleCourses = filterCoursesByLanguage(s.courses, lang)
                   return (
                     <div key={i} className={styles.skillItem}
                       style={{ opacity: isDone ? 0.45 : 1, transition: 'opacity 0.2s ease' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                      <div className={styles.skillTopRow}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         {/* Clickable checkbox */}
                         <button
                           onClick={() => toggleSkill(cat, s.skill)}
@@ -1386,11 +1408,15 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                         }}>
                           {cap(s.skill)}
                         </span>
+                        </div>
                       </div>
 
                       {!isDone && s.courses.length > 0 && (
                         <div className={styles.courses}>
-                          {s.courses.map((c, j) => (
+                          {visibleCourses.length === 0 && (
+                            <div className={styles.courseFallback}>{t.results.noCourses}</div>
+                          )}
+                          {visibleCourses.map((c, j) => (
                             <div key={j} className={styles.courseWrap}>
                               <div className={styles.course} style={{ cursor: 'pointer' }}
                                 onClick={() => setActiveCourse(c)}>
@@ -1400,7 +1426,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                                   {c.rating && <span className={styles.courseRating}>★ {c.rating}</span>}
                                   {c.reviews != null && (
                                     <span className={styles.courseReviews}>
-                                      {Number(c.reviews).toLocaleString()} reviews
+                                      {Number(c.reviews).toLocaleString()} {t.results.reviews}
                                     </span>
                                   )}
                                 </span>
@@ -1451,7 +1477,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
                 </svg>
               </span>
-              <span>Ask anything about your results</span>
+              <span>{t.results.askAnything}</span>
             </div>
           )}
           {messages.map((m, i) => (
@@ -1459,7 +1485,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
               <div className={styles.msgOuter}>
                 {m.thoughts && !m.streaming && (
                   <details className={styles.thoughtBlock}>
-                    <summary>{lang === 'ru' ? 'Размышления' : 'Thoughts'}</summary>
+                    <summary>{t.results.thoughts}</summary>
                     <div className={styles.thoughtContent}>{m.thoughts}</div>
                   </details>
                 )}
@@ -1476,7 +1502,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                 {!m.streaming && m.content && (
                   <button
                     className={`${styles.msgCopyBtn} ${m.role === 'user' ? styles.msgCopyBtnUser : styles.msgCopyBtnAi}`}
-                    title="Copy"
+                    title={t.results.copy}
                     onClick={() => {
                       copyText(m.content)
                       setCopiedMsg(`msg-${i}`)
@@ -1512,7 +1538,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
 
         <div className={styles.chatBottom}>
           <div className={styles.chatToolbar}>
-            <DeepModeBtn active={deepMode} onClick={() => setDeepMode(v => !v)} lang={lang}/>
+            <DeepModeBtn active={deepMode} onClick={() => setDeepMode(v => !v)} lang={lang} t={t}/>
           </div>
           <div className={styles.chatInput}>
             <textarea
@@ -1541,7 +1567,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
 
       {/* ─ COURSE MODAL ─ */}
       {activeCourse && (
-        <CourseModal course={activeCourse} onClose={() => setActiveCourse(null)}/>
+        <CourseModal course={activeCourse} onClose={() => setActiveCourse(null)} t={t}/>
       )}
 
       <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }`}</style>

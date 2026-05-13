@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AnimatePresence, motion } from 'framer-motion'
 import { AppProvider, useApp } from './context/AppContext'
 import Navbar from './components/Navbar'
 import Hero from './pages/Hero'
@@ -32,37 +33,64 @@ function AppInner() {
     }
   }
 
+  const pageVariants = {
+    initial: { opacity: 0, scale: 0.975, y: 18, filter: 'blur(10px)' },
+    animate: { opacity: 1, scale: 1, y: 0, filter: 'blur(0px)' },
+    exit: { opacity: 0, scale: 1.025, y: -18, filter: 'blur(10px)' },
+  }
+
   return (
-    <>
-      <Navbar />
+    <div className="appShell">
+      <div className="dataGrid" aria-hidden="true" />
 
-      {page === 'hero' && (
-        <Hero onStart={handleStart} />
-      )}
+      <Navbar onLogoClick={handleBack} />
 
-      {page === 'form' && (
-        <>
-          {error && (
-            <div style={{
-              maxWidth: 600,
-              margin: '1rem auto',
-              padding: '0.75rem 1rem',
-              background: 'var(--color-error-highlight)',
-              color: 'var(--color-error)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: 'var(--text-sm)',
-            }}>
-              {error}
-            </div>
-          )}
-          <Form onSubmit={handleSubmit} loading={loading} />
-        </>
-      )}
+      <AnimatePresence mode="wait">
+        {page === 'hero' && (
+          <motion.main
+            key="hero"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <Hero onStart={handleStart} />
+          </motion.main>
+        )}
 
-      {page === 'results' && results && (
-        <Results results={results} onBack={handleBack} onRetry={handleToForm} />
-      )}
-    </>
+        {page === 'form' && (
+          <motion.main
+            key="form"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+          >
+            {error && (
+              <div className="appError">
+                {error}
+              </div>
+            )}
+            <Form onSubmit={handleSubmit} loading={loading} />
+          </motion.main>
+        )}
+
+        {page === 'results' && results && (
+          <motion.main
+            key="results"
+            variants={pageVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
+          >
+            <Results results={results} onBack={handleBack} onRetry={handleToForm} />
+          </motion.main>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 

@@ -21,7 +21,7 @@ PROFESSION_NAMES_PATH  = MODELS_DIR / 'profession_names.joblib'
 
 # Roadmap + courses
 ROADMAP_PATH  = MODELS_DIR / 'profession_profiles.json'
-COURSES_PATH  = DATA_DIR   / 'combined_courses.csv'
+COURSES_PATH  = DATA_DIR   / 'courses_combined.csv'
 
 # Courses from Roadmap
 TOP_N_COURSES = 1

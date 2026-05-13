@@ -1,4 +1,20 @@
-const BASE = process.env.REACT_APP_API_URL || 'http://localhost:8000'
+function getBaseUrl() {
+  if (process.env.REACT_APP_API_URL) {
+    return process.env.REACT_APP_API_URL
+  }
+
+  if (
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1'].includes(window.location.hostname) &&
+    window.location.port === '3000'
+  ) {
+    return 'http://localhost:8000'
+  }
+
+  return ''
+}
+
+const BASE = getBaseUrl()
 
 export async function getRecommendation(profile) {
   const res = await fetch(`${BASE}/recommend`, {

@@ -18,6 +18,15 @@ const TECH_SKILLS = [
 
 const SOFT_KEYS = ['communication', 'leadership', 'problem_solving', 'teamwork', 'adaptability']
 const FIELDS    = ['Data Science', 'Computer Science', 'Software Engineering', 'AI', 'Cybersecurity']
+const PROFESSION_KEYS = [
+  'Data Analyst',
+  'Data Engineer',
+  'Data Scientist',
+  'Machine Learning Engineer',
+  'Business Analyst',
+  'Cloud Engineer',
+  'Software Engineer',
+]
 
 // Autocomplete suggestions list - add as many as you want here
 const SKILL_SUGGESTIONS = [
@@ -144,7 +153,7 @@ export default function Form({ onSubmit, loading }) {
 
   const validate = () => {
     const e = {}
-    if (!form.gpa || form.gpa < 0 || form.gpa > 4) e.gpa = t.errors.gpa
+    if (!form.gpa || Number(form.gpa) < 2 || Number(form.gpa) > 4) e.gpa = t.errors.gpa
     setErrors(e)
     return !Object.keys(e).length
   }
@@ -158,7 +167,7 @@ export default function Form({ onSubmit, loading }) {
   const techChecked  = TECH_SKILLS.filter(s => form[s.key] === 1).length
   const softAvg      = SOFT_KEYS.reduce((a, k) => a + form[k], 0) / SOFT_KEYS.length
   const hasSkills    = form.skills.length > 0
-  const hasGpa       = form.gpa !== '' && Number(form.gpa) >= 0 && Number(form.gpa) <= 4
+  const hasGpa       = form.gpa !== '' && Number(form.gpa) >= 2 && Number(form.gpa) <= 4
   const completedSteps = [hasSkills, hasGpa, techChecked > 0, true].filter(Boolean).length
   const progress     = Math.round((completedSteps / 4) * 100)
 
@@ -338,7 +347,7 @@ export default function Form({ onSubmit, loading }) {
                   <label className={styles.label}>{t.form.personal.gpa}</label>
                   <input
                     className={`${styles.input} ${errors.gpa ? styles.error : ''}`}
-                    type="number" min="0" max="4" step="0.1"
+                    type="number" min="2" max="4" step="0.1"
                     value={form.gpa} placeholder="3.5"
                     onChange={e => set('gpa', e.target.value)}
                   />
@@ -425,9 +434,9 @@ export default function Form({ onSubmit, loading }) {
             <div className={styles.chatBubble}>
               <strong>{t.form.guide.professionsTitle}</strong>
               <ul className={styles.chatList}>
-                <li>Data Analyst</li><li>Data Engineer</li><li>Data Scientist</li>
-                <li>ML Engineer</li><li>Business Analyst</li>
-                <li>Cloud Engineer</li><li>Software Engineer</li>
+                {PROFESSION_KEYS.map(prof => (
+                  <li key={prof}>{t.professions?.[prof] || prof}</li>
+                ))}
               </ul>
             </div>
           </div>

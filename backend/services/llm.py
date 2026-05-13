@@ -1,12 +1,15 @@
 import json
 from google import genai
 from google.genai import types
-from openai import OpenAI
 import os
 from dotenv import load_dotenv
 import time
 
 load_dotenv()
+
+
+class LLMNotConfiguredError(RuntimeError):
+    """Raised when chat endpoints are used without an API key."""
 
 PROFESSION_DESCRIPTIONS = {
     'Data Scientist':            'Builds predictive models and extracts insights from data using statistics and machine learning.',
@@ -21,7 +24,8 @@ PROFESSION_DESCRIPTIONS = {
 class LLMService:
     '''Service for interacting with the LLM (Gemini) to provide personalized career advice based on the student's profile and other context.'''
     def __init__(self):
-        self.client = genai.Client(api_key=os.getenv("API_KEY"))
+        api_key = os.getenv("API_KEY") or os.getenv("GOOGLE_API_KEY")
+        self.client = genai.Client(api_key=api_key) if api_key else None
         self.system_prompt = """
 You are an expert IT career advisor helping a student choose their career path.
 
@@ -35,6 +39,11 @@ Rules:
 - If the user writes in Russian — respond in Russian, location is Kazakhstan (take it into account). Default is English, location is global.
 """
 
+    def ensure_configured(self):
+        if self.client is None:
+            raise LLMNotConfiguredError(
+                "LLM is not configured. Set API_KEY or GOOGLE_API_KEY to enable /chat endpoints."
+            )
 
     def _build_gemini_history(self, history: list) -> list:
         '''Convert our internal message history format to the format expected by Gemini.'''
@@ -87,12 +96,14 @@ Rules:
 {json.dumps(roadmap_with_courses, indent=2, ensure_ascii=False)}
 """
     def list_models(self):
+        self.ensure_configured()
         for m in self.client.models.list():
             if 'flash' in m.name.lower():
                 print(m.name)
 
     def chat(self, context: str, history: list, message: str) -> str:
         '''Generate a response from the LLM based on the provided context, conversation history, and user message.'''
+        self.ensure_configured()
         gemini_history = []
         for msg in history:
             if not isinstance(msg, dict):
@@ -127,6 +138,7 @@ Rules:
     
     def chat_stream(self, context: str, history: list, message: str, deep: bool = False):
         '''Generate a streaming response from the LLM, yielding chunks of text as they are generated. If `deep` is True, include the model's thoughts in the stream.'''
+        self.ensure_configured()
         model = "gemini-2.5-pro" if deep else "gemini-2.5-flash-lite" 
         
         full_message = f"Context:\n{context}\n\nQuestion: {message}"
