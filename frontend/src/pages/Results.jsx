@@ -53,6 +53,39 @@ const filterCoursesByLanguage = (courses = [], lang) => {
   return preferred.length ? preferred : courses
 }
 
+const normalizeSkillKey = s => String(s || '').toLowerCase().replace(/[^a-z0-9+#]+/g, '_').replace(/^_+|_+$/g, '')
+const pct = (value, max = 1) => Math.max(0, Math.min(100, Math.round((parseFloat(value || 0) / max) * 100)))
+const sumSkillCount = roadmap => Object.values(roadmap || {}).reduce((total, skills) => total + (Array.isArray(skills) ? skills.length : 0), 0)
+const flattenRoadmapSkills = roadmap => Object.entries(roadmap || {}).flatMap(([cat, skills]) =>
+  (Array.isArray(skills) ? skills : []).map(skill => ({ cat, skill }))
+)
+const getProfessionRoadmapSummary = (results, profession) => {
+  const all = results?.roadmaps_by_profession?.[profession]
+  if (all) return all
+  return { full: results?.full_roadmap || {}, gap: {} }
+}
+
+const DEPENDENCY_RULES = {
+  fastapi: ['python'],
+  django: ['python'],
+  flask: ['python'],
+  pandas: ['python'],
+  numpy: ['python'],
+  pytorch: ['python'],
+  tensorflow: ['python'],
+  scikit_learn: ['python'],
+  spark: ['python', 'sql'],
+  airflow: ['python'],
+  dbt: ['sql'],
+  tableau: ['sql'],
+  power_bi: ['sql'],
+  react: ['javascript'],
+  next_js: ['javascript', 'react'],
+  node_js: ['javascript'],
+  kubernetes: ['docker'],
+  terraform: ['cloud_computing'],
+}
+
 const ChevronIcon = ({ dir = 'left' }) => (
   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
     {dir === 'left'  && <path d="M15 18l-6-6 6-6"/>}
@@ -76,7 +109,7 @@ const CheckIcon = ({ size = 12 }) => (
 )
 
 /* ─── Progress Ring ──────────────────────────────────────────── */
-function ProgressRing({ value, size = 64, stroke = 5, color = '#5b8dee', animKey }) {
+function ProgressRing({ value, size = 64, stroke = 5, color = '#5b8dee', animKey, tooltipText }) {
   const [progress, setProgress] = useState(0)
   const r    = (size - stroke) / 2
   const circ = 2 * Math.PI * r
@@ -89,7 +122,8 @@ function ProgressRing({ value, size = 64, stroke = 5, color = '#5b8dee', animKey
   }, [pct, animKey])
 
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
+    <div className={tooltipText ? styles.scoreCircleTooltip : ''} data-tip={tooltipText}
+      style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
       <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--border)" strokeWidth={stroke}/>
         <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke}
@@ -245,6 +279,287 @@ function RadarChart({ data, animKey, lang }) {
     </div>
   )
 }
+
+function ProfessionBarsChart({ professions, rows, profLabel, t, animKey, onSelect }) {
+  const maxScore = Math.max(...professions.map(p => p.final_score || 0), 1)
+  const [hovered, setHovered] = useState(null)
+
+  return (
+    <div className={styles.compareChart}>
+      <div className={styles.compareHeader}>
+        <span>{t.results.compareAll}</span>
+        <small>{t.results.scoreOverview}</small>
+      </div>
+      <div className={styles.professionBars}>
+        {professions.map((p, index) => {
+          const scorePct = pct(p.final_score, maxScore)
+          const tooltip = `${profLabel(p.name)}\n${t.results.scoreOverview}: ${pct(p.final_score)}%\n${rows
+            .filter(r => p[r.key] != null)
+            .map(r => `${r.label}: ${pct(p[r.key], r.max)}%`)
+            .join('\n')}`
+          return (
+            <button
+              key={p.name}
+              type="button"
+              className={`${styles.professionBarRow} ${hovered === p.name ? styles.professionBarRowHover : ''}`}
+              data-tip={tooltip}
+              onMouseEnter={() => setHovered(p.name)}
+              onMouseLeave={() => setHovered(null)}
+              onClick={() => onSelect?.(p.name)}
+            >
+              <span className={styles.professionBarRank}>#{index + 1}</span>
+              <span className={styles.professionBarName}>{profLabel(p.name)}</span>
+              <span className={styles.professionBarTrack}>
+                <span
+                  className={styles.professionBarFill}
+                  style={{ width: `${scorePct}%`, transitionDelay: `${index * 35}ms` }}
+                />
+                <span className={styles.professionBarFactors}>
+                  {rows.map(r => p[r.key] != null && (
+                    <span
+                      key={r.key}
+                      style={{
+                        width: `${Math.max(3, pct(p[r.key], r.max) / rows.length)}%`,
+                        background: BAR_COLORS[r.key],
+                      }}
+                    />
+                  ))}
+                </span>
+              </span>
+              <span className={styles.professionBarPct}>{pct(p.final_score)}%</span>
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function MultiProfessionRadar({ professions, profLabel, rows, t, animKey }) {
+  const [tooltip, setTooltip] = useState(null)
+  const [opacity, setOpacity] = useState(0)
+
+  useEffect(() => {
+    setOpacity(0)
+    const timer = setTimeout(() => setOpacity(1), 60)
+    return () => clearTimeout(timer)
+  }, [animKey])
+
+  const axes = professions
+  const size = 330
+  const cx = size / 2
+  const cy = size / 2
+  const r = 112
+  const levels = [0.25, 0.5, 0.75, 1]
+  const angleOf = i => (Math.PI * 2 * i / axes.length) - Math.PI / 2
+  const point = (i, ratio) => ({
+    x: cx + r * ratio * Math.cos(angleOf(i)),
+    y: cy + r * ratio * Math.sin(angleOf(i)),
+  })
+  const poly = (key, max = 1) => axes
+    .map((p, i) => point(i, Math.min(parseFloat(p[key] || 0) / max, 1)))
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z'
+  const rings = levels.map(level => axes.map((_, i) => point(i, level))
+    .map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x},${p.y}`).join(' ') + ' Z')
+
+  return (
+    <div className={styles.radarCompare}>
+      <div className={styles.compareHeader}>
+        <span>{t.results.chartModes.radar}</span>
+        <small>{t.results.compareAll}</small>
+      </div>
+      <div className={styles.radarCompareBody}>
+        <svg width={size} height={size} viewBox={`-44 -44 ${size + 88} ${size + 88}`}
+          style={{ opacity, transition: 'opacity .35s ease' }}>
+          {rings.map((d, i) => (
+            <path key={i} d={d} fill="none" stroke="var(--border)" strokeWidth={i === rings.length - 1 ? 1.5 : 1}/>
+          ))}
+          {axes.map((p, i) => {
+            const end = point(i, 1)
+            const label = profLabel(p.name)
+            return (
+              <g key={p.name}>
+                <line x1={cx} y1={cy} x2={end.x} y2={end.y} stroke="var(--border)" />
+                <text
+                  x={point(i, 1.27).x}
+                  y={point(i, 1.27).y}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize="10"
+                  fill="var(--text-2)"
+                  fontFamily="var(--font-mono)"
+                >
+                  {label.length > 15 ? label.slice(0, 14) + '…' : label}
+                </text>
+              </g>
+            )
+          })}
+          <path d={poly('final_score')} fill="#5b8dee" fillOpacity=".17" stroke="#5b8dee" strokeWidth="2.5"/>
+          <path d={poly('skill_match')} fill="none" stroke="#4caf82" strokeWidth="1.8" strokeDasharray="5 4"/>
+          <path d={poly('profile_match')} fill="none" stroke="#9b6ddf" strokeWidth="1.8" strokeDasharray="2 4"/>
+          {axes.map((p, i) => {
+            const pos = point(i, Math.min(p.final_score || 0, 1))
+            const tooltipText = `${profLabel(p.name)}\n${t.results.scoreOverview}: ${pct(p.final_score)}%\n${rows.map(r => `${r.label}: ${pct(p[r.key], r.max)}%`).join('\n')}`
+            return (
+              <circle
+                key={p.name}
+                cx={pos.x}
+                cy={pos.y}
+                r="6"
+                fill="#5b8dee"
+                stroke="var(--bg)"
+                strokeWidth="2"
+                onMouseEnter={() => setTooltip({ x: pos.x, y: pos.y, text: tooltipText })}
+                onMouseLeave={() => setTooltip(null)}
+              />
+            )
+          })}
+        </svg>
+        <div className={styles.radarLegend}>
+          <span><i style={{ background: '#5b8dee' }}/>{t.results.scoreOverview}</span>
+          <span><i style={{ background: '#4caf82' }}/>{t.results.skillMatch}</span>
+          <span><i style={{ background: '#9b6ddf' }}/>{t.results.classification}</span>
+        </div>
+        {tooltip && (
+          <div className={styles.chartTooltip} style={{ left: tooltip.x + 42, top: tooltip.y + 24 }}>
+            {tooltip.text}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function SkillGapComparison({ professions, results, profLabel, t, onSelect }) {
+  return (
+    <div className={styles.gapCompare}>
+      <div className={styles.compareHeader}>
+        <span>{t.results.gapByProfession}</span>
+        <small>{t.results.compareAll}</small>
+      </div>
+      {professions.map(p => {
+        const summary = getProfessionRoadmapSummary(results, p.name)
+        const total = sumSkillCount(summary.full)
+        const gap = sumSkillCount(summary.gap)
+        const known = Math.max(total - gap, 0)
+        const completion = total ? Math.round((known / total) * 100) : 0
+        const tooltip = `${profLabel(p.name)}\n${t.results.youKnow}: ${known}/${total}\n${t.results.toLearn}: ${gap}`
+        return (
+          <button key={p.name} type="button" className={styles.gapCompareRow} data-tip={tooltip} onClick={() => onSelect?.(p.name)}>
+            <span className={styles.gapCompareName}>{profLabel(p.name)}</span>
+            <span className={styles.gapCompareTrack}>
+              <span className={styles.gapKnown} style={{ width: `${completion}%` }}/>
+            </span>
+            <span className={styles.gapCompareMeta}>{known}/{total}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ScoreCircleGrid({ professions, rows, profLabel, t, onSelect }) {
+  return (
+    <div className={styles.scoreCircleGrid}>
+      {professions.map(p => {
+        const tooltip = `${profLabel(p.name)}\n${t.results.scoreOverview}: ${pct(p.final_score)}%\n${rows.map(r => `${r.label}: ${pct(p[r.key], r.max)}%`).join('\n')}`
+        return (
+          <button key={p.name} className={styles.scoreCircleCard} onClick={() => onSelect?.(p.name)}>
+            <ProgressRing value={p.final_score ?? 0} size={58} stroke={4} color="#5b8dee" animKey={p.name} tooltipText={tooltip}/>
+            <span>{profLabel(p.name)}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function ExplainabilityPanel({ profession, rows, profLabel, t }) {
+  if (!profession) return null
+  const contributions = rows
+    .filter(row => profession[row.key] != null)
+    .map(row => {
+      const weight = row.key === 'trend_score' ? 0.15 : row.key === 'market_share' ? 0.05 : 0.4
+      return { ...row, contribution: pct(profession[row.key], row.max) * weight }
+    })
+    .sort((a, b) => b.contribution - a.contribution)
+  const maxContribution = Math.max(...contributions.map(item => item.contribution), 1)
+
+  return (
+    <section className={styles.explainCard}>
+      <div className={styles.compareHeader}>
+        <span>{t.results.explainability}</span>
+        <small>{t.results.featureImportance}</small>
+      </div>
+      <p className={styles.explainText}>
+        {t.results.whyTop ? t.results.whyTop(profLabel(profession.name)) : profLabel(profession.name)}
+      </p>
+      <div className={styles.explainFactors}>
+        {contributions.map(item => (
+          <div key={item.key} className={styles.explainFactor}>
+            <div className={styles.explainFactorTop}>
+              <span>{item.label}</span>
+              <strong>{pct(profession[item.key], item.max)}%</strong>
+            </div>
+            <div className={styles.explainFactorTrack}>
+              <span style={{ width: `${Math.round(item.contribution / maxContribution * 100)}%`, background: BAR_COLORS[item.key] }}/>
+            </div>
+            <p>{t.results.factorTexts?.[item.key]}</p>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function SkillDependencyTree({ roadmap, doneSkills, formSkills, t }) {
+  const learned = new Set([
+    ...(formSkills || []).map(normalizeSkillKey),
+    ...Array.from(doneSkills || []).map(key => normalizeSkillKey(key.split('::')[1] || key)),
+  ])
+  const items = flattenRoadmapSkills(Object.fromEntries(
+    Object.entries(roadmap || {}).map(([cat, skills]) => [cat, skills.map(item => item.skill)])
+  ))
+  const enriched = items.map(item => {
+    const key = normalizeSkillKey(item.skill)
+    const prerequisites = DEPENDENCY_RULES[key] || []
+    const isDone = learned.has(key)
+    const ready = prerequisites.every(dep => learned.has(normalizeSkillKey(dep)))
+    return { ...item, key, prerequisites, isDone, ready }
+  })
+  const next = enriched.find(item => !item.isDone && item.ready) || enriched.find(item => !item.isDone)
+
+  if (!enriched.length) return null
+
+  return (
+    <section className={styles.dependencyPanel}>
+      <div className={styles.compareHeader}>
+        <span>{t.results.dependencyTree}</span>
+        {next && <small>{t.results.nextStep}: {cap(next.skill)}</small>}
+      </div>
+      <div className={styles.dependencyTree}>
+        {enriched.map(item => (
+          <div key={`${item.cat}-${item.skill}`} className={`${styles.dependencyNode} ${item.isDone ? styles.dependencyDone : item.ready ? styles.dependencyReady : styles.dependencyLocked}`}>
+            <div className={styles.dependencyNodeTop}>
+              <span>{cap(item.skill)}</span>
+              <strong>{item.isDone ? t.results.learned : item.ready ? t.results.ready : t.results.locked}</strong>
+            </div>
+            <div className={styles.dependencyPrereq}>
+              <span>{t.results.prerequisites}</span>
+              <div>
+                {item.prerequisites.length
+                  ? item.prerequisites.map(dep => (
+                    <i key={dep} className={learned.has(normalizeSkillKey(dep)) ? styles.prereqDone : ''}>{cap(dep.replace(/_/g, ' '))}</i>
+                  ))
+                  : <i className={styles.prereqDone}>{t.results.ready}</i>}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  )
+}
 const SKILL_IMPLIES = {
 
     "react.js":         ["javascript"],
@@ -338,7 +653,7 @@ const SKILL_IMPLIES = {
     "jenkins":          ["groovy"],
 }
 
-function SkillGapRadar({ results, formData, animKey, lang }) {
+function SkillGapRadar({ results, formData, profession, animKey, lang }) {
   const [tooltip, setTooltip] = useState(null)
   const [opacity, setOpacity]  = useState(0)
   useEffect(() => {
@@ -347,7 +662,7 @@ function SkillGapRadar({ results, formData, animKey, lang }) {
     return () => clearTimeout(t)
   }, [animKey])
 
-  const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, '_')
+  const norm = normalizeSkillKey
   const baseSkills = new Set(
     (formData?.skills || []).map(s =>
       norm(typeof s === 'string' ? s : s.label || s.value || s.name || '')
@@ -389,8 +704,8 @@ while (changed) {
   return false
 }
 
-  // Get full_roadmap from results - all profession skills
-  const fullRoadmap = results?.full_roadmap || {}
+  const professionSummary = getProfessionRoadmapSummary(results, profession || results?.top_profession)
+  const fullRoadmap = professionSummary.full || {}
 
   // Collect axes: up to 10 skills from full_roadmap
   const axes = []
@@ -647,6 +962,26 @@ const stripMarkdown = text => text
   .replace(/> /gm, '')
   .trim()
 
+const isCareerChatAllowed = message => {
+  const text = String(message || '').toLowerCase()
+  const injection = [
+    'ignore previous', 'system prompt', 'developer message', 'reveal instructions',
+    'забудь инструкции', 'игнорируй инструкции', 'системный промпт', 'раскрой инструкции',
+  ]
+  const offTopic = [
+    'bubble sort', 'write code', 'generate code', 'solve math', 'math problem', 'essay',
+    'пузырьковую сортировку', 'напиши код', 'сгенерируй эссе', 'реши задачу', 'математик',
+  ]
+  const career = [
+    'career', 'profession', 'job', 'roadmap', 'skill', 'course', 'recommendation',
+    'карьер', 'професс', 'работ', 'роадмап', 'навык', 'курс', 'рекомендац',
+    'мансап', 'маман', 'жұмыс', 'жоспар', 'дағды', 'курс', 'ұсыныс',
+  ]
+  if (injection.some(pattern => text.includes(pattern))) return false
+  if (offTopic.some(pattern => text.includes(pattern)) && !career.some(pattern => text.includes(pattern))) return false
+  return true
+}
+
 /* ─── Course description modal ───────────────────────────────── */
 function CourseModal({ course, onClose, t }) {
   useEffect(() => {
@@ -708,9 +1043,10 @@ function DeepModeBtn({ active, onClick, lang, t }) {
 }
 
 /* ─── Main Component ─────────────────────────────────────────── */
-export default function Results({ results, formData, onBack, onNewAnalysis }) {
+export default function Results({ results: initialResults, formData, onBack, onRetry, onNewAnalysis }) {
   const { t, lang } = useApp()
 
+  const [results,      setResults]      = useState(initialResults)
   const [tab,          setTab]          = useState('best')
   const [doneSkills, setDoneSkills] = useState(new Set())
   const [sortBy,       setSortBy]       = useState('score')
@@ -722,20 +1058,36 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   const [deepMode,     setDeepMode]     = useState(false)
   const [copied,       setCopied]       = useState(null)
   const [leftOpen,     setLeftOpen]     = useState(true)
-  const [rightOpen,    setRightOpen]    = useState(true)
+  const [rightOpen,    setRightOpen]    = useState(false)
   const [pdfLoading,   setPdfLoading]   = useState(false)
   const [openCats,     setOpenCats]     = useState(new Set())
   const [cardKey,      setCardKey]      = useState(0)
   const [copiedMsg,    setCopiedMsg]    = useState(null)
   const [activeCourse, setActiveCourse] = useState(null)   // ← for course modal
+  const [categoryOrder, setCategoryOrder] = useState([])
+  const [skillOrders, setSkillOrders] = useState({})
+  const [dragItem, setDragItem] = useState(null)
+  const [history, setHistory] = useState([])
+  const [savedCurrent, setSavedCurrent] = useState(false)
+  const [listening, setListening] = useState(false)
+  const [voiceNotice, setVoiceNotice] = useState('')
+  const [chatSize, setChatSize] = useState({ width: 360, height: null })
 
   const messagesEndRef = useRef(null)
   const greetedRef     = useRef(false)
   const textareaRef    = useRef(null)
   const abortRef       = useRef(null)
+  const recognitionRef = useRef(null)
+
+  useEffect(() => {
+    setResults(initialResults)
+    setSelectedProf(null)
+    setSavedCurrent(false)
+  }, [initialResults])
 
   const top_profession = results.top_profession
   const rawRoadmap     = results.roadmap_with_courses
+  const resultStorageKey = `career-result:${results.session_id || top_profession || 'local'}`
   const profLabel = name => t.professions?.[name] || name
   const catLabel = cat => t.categories?.[cat] || cat.replace(/_/g, ' ')
   const skillWord = n => t.results.skillWord ? t.results.skillWord(n) : `${n} skills`
@@ -803,6 +1155,28 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
     ])
   )
 
+  const orderedCategoryKeys = (categoryOrder.length ? categoryOrder : Object.keys(roadmapAdapted))
+    .filter(cat => roadmapAdapted[cat])
+  const orderedRoadmapEntries = orderedCategoryKeys.map(cat => {
+    const order = skillOrders[cat] || []
+    const skills = [...(roadmapAdapted[cat] || [])].sort((a, b) => {
+      const ai = order.indexOf(a.skill)
+      const bi = order.indexOf(b.skill)
+      if (ai === -1 && bi === -1) return 0
+      if (ai === -1) return 1
+      if (bi === -1) return -1
+      return ai - bi
+    })
+    const active = skills.filter(s => !doneSkills.has(`${cat}::${s.skill}`))
+    const completed = skills.filter(s => doneSkills.has(`${cat}::${s.skill}`))
+    return [cat, [...active, ...completed]]
+  })
+  const totalRoadmapSteps = Object.values(roadmapAdapted).reduce((sum, skills) => sum + skills.length, 0)
+  const doneRoadmapSteps = Array.from(doneSkills).filter(key => {
+    const [cat, skill] = key.split('::')
+    return roadmapAdapted[cat]?.some(item => item.skill === skill)
+  }).length
+
   const roadmapPreview = Object.entries(roadmapAdapted).map(([cat, skills]) => ({
     cat,
     skill: skills[0]?.skill ? cap(skills[0].skill) : '',
@@ -818,8 +1192,46 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   })
 }
   useEffect(() => {
-    setOpenCats(new Set(Object.keys(roadmapAdapted)))
-  }, [top_profession])
+    const keys = Object.keys(roadmapAdapted)
+    setOpenCats(new Set(keys))
+    setCategoryOrder(keys)
+    setSkillOrders(Object.fromEntries(keys.map(cat => [cat, roadmapAdapted[cat].map(item => item.skill)])))
+    try {
+      const saved = JSON.parse(localStorage.getItem(resultStorageKey) || '{}')
+      if (Array.isArray(saved.doneSkills)) setDoneSkills(new Set(saved.doneSkills))
+      if (Array.isArray(saved.categoryOrder)) setCategoryOrder(saved.categoryOrder)
+      if (saved.skillOrders) setSkillOrders(saved.skillOrders)
+    } catch {}
+  }, [resultStorageKey])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(resultStorageKey, JSON.stringify({
+        doneSkills: Array.from(doneSkills),
+        categoryOrder,
+        skillOrders,
+      }))
+    } catch {}
+  }, [doneSkills, categoryOrder, skillOrders, resultStorageKey])
+
+  useEffect(() => {
+    try {
+      setHistory(JSON.parse(localStorage.getItem('career-recommendation-history') || '[]'))
+    } catch {
+      setHistory([])
+    }
+  }, [])
+
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') {
+        setRightOpen(false)
+        setActiveCourse(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const toggleCat = cat => setOpenCats(prev => {
     const next = new Set(prev)
@@ -846,6 +1258,16 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   const sendMessage = async (overrideMsg) => {
     const msg = (overrideMsg ?? input).trim()
     if (!msg || chatLoading) return
+
+    if (!isCareerChatAllowed(msg)) {
+      setMessages(p => [
+        ...p,
+        { role: 'user', content: msg },
+        { role: 'assistant', content: t.results.assistantScope, streaming: false },
+      ])
+      setInput('')
+      return
+    }
 
     const userMsg         = { role: 'user', content: msg }
     const historySnapshot = [...messages, userMsg]
@@ -953,20 +1375,134 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
         s.courses.forEach(c => lines.push(`    ${c.title} (${c.platform})`))
       })
     })
-    copyText(`Career Roadmap: ${profLabel(top_profession)}\n\n` + lines.join('\n'))
+    copyText(`${t.results.roadmap}: ${profLabel(top_profession)}\n\n` + lines.join('\n'))
     setCopied('roadmap')
     setTimeout(() => setCopied(null), 2000)
   }
 
   const handleShare = () => {
-    const text = `My career match: ${profLabel(top_profession)} ${activeProf?.final_score ? Math.round(activeProf.final_score * 100) + '%' : ''} — Build Career`
+    const text = `${t.results.selectedCareer}: ${profLabel(top_profession)} ${activeProf?.final_score ? Math.round(activeProf.final_score * 100) + '%' : ''} - CareerPath`
     if (navigator.share) {
-      navigator.share({ title: 'Build Career', text }).catch(() => {})
+      navigator.share({ title: 'CareerPath', text }).catch(() => {})
     } else {
       copyText(text)
       setCopied('share')
       setTimeout(() => setCopied(null), 2000)
     }
+  }
+
+  const saveCurrentResult = () => {
+    const entry = {
+      id: `${Date.now()}-${results.session_id || top_profession}`,
+      createdAt: new Date().toISOString(),
+      top_profession,
+      selectedProfession: activeProfName,
+      results,
+      progress: {
+        done: Array.from(doneSkills),
+        categoryOrder,
+        skillOrders,
+      },
+    }
+    const next = [entry, ...history.filter(item => item.results?.session_id !== results.session_id && item.id !== entry.id)].slice(0, 12)
+    setHistory(next)
+    setSavedCurrent(true)
+    try { localStorage.setItem('career-recommendation-history', JSON.stringify(next)) } catch {}
+  }
+
+  const openHistoryItem = item => {
+    setResults(item.results)
+    setSelectedProf(item.selectedProfession || item.top_profession)
+    setDoneSkills(new Set(item.progress?.done || []))
+    setCategoryOrder(item.progress?.categoryOrder || [])
+    setSkillOrders(item.progress?.skillOrders || {})
+    setTab('best')
+    setSavedCurrent(true)
+  }
+
+  const clearHistory = () => {
+    setHistory([])
+    try { localStorage.removeItem('career-recommendation-history') } catch {}
+  }
+
+  const moveCategory = (fromCat, toCat) => {
+    if (!fromCat || !toCat || fromCat === toCat) return
+    setCategoryOrder(prev => {
+      const base = (prev.length ? prev : Object.keys(roadmapAdapted)).filter(cat => roadmapAdapted[cat])
+      const next = [...base]
+      const from = next.indexOf(fromCat)
+      const to = next.indexOf(toCat)
+      if (from < 0 || to < 0) return prev
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+
+  const moveSkill = (cat, fromSkill, toSkill) => {
+    if (!cat || !fromSkill || !toSkill || fromSkill === toSkill) return
+    setSkillOrders(prev => {
+      const base = prev[cat] || roadmapAdapted[cat]?.map(item => item.skill) || []
+      const next = [...base]
+      const from = next.indexOf(fromSkill)
+      const to = next.indexOf(toSkill)
+      if (from < 0 || to < 0) return prev
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return { ...prev, [cat]: next }
+    })
+  }
+
+  const startVoiceInput = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setVoiceNotice(t.results.voiceUnsupported)
+      return
+    }
+    const recognition = new SpeechRecognition()
+    recognition.lang = lang === 'kk' ? 'kk-KZ' : lang === 'ru' ? 'ru-RU' : 'en-US'
+    recognition.interimResults = true
+    recognition.continuous = false
+    recognition.onstart = () => setListening(true)
+    recognition.onerror = () => setListening(false)
+    recognition.onend = () => setListening(false)
+    recognition.onresult = event => {
+      const transcript = Array.from(event.results).map(result => result[0]?.transcript || '').join(' ')
+      setInput(transcript)
+    }
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
+  const stopVoiceInput = () => {
+    recognitionRef.current?.stop()
+    setListening(false)
+  }
+
+  const startChatResize = e => {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = chatSize.width
+    const onMove = event => {
+      const nextWidth = Math.min(Math.max(startWidth + (startX - event.clientX), 300), Math.min(window.innerWidth - 24, 620))
+      setChatSize(size => ({ ...size, width: nextWidth }))
+    }
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  const speakLastAnswer = () => {
+    if (!window.speechSynthesis) return
+    const last = [...messages].reverse().find(m => m.role === 'assistant' && m.content)
+    if (!last) return
+    window.speechSynthesis.cancel()
+    const utterance = new SpeechSynthesisUtterance(last.content)
+    utterance.lang = lang === 'kk' ? 'kk-KZ' : lang === 'ru' ? 'ru-RU' : 'en-US'
+    window.speechSynthesis.speak(utterance)
   }
 
   const handleExportPdf = () => {
@@ -979,6 +1515,10 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
     .replace(/https?:\/\/\S+/g, '')
     .replace(/\s+/g, ' ')
     .trim()
+  const esc = str => clean(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 
   const scoreLines = rows
     .filter(r => activeProf?.[r.key] != null)
@@ -992,6 +1532,45 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
       </div>
     </div>`).join('')
 
+  const allScoreLines = sorted.map(p => {
+    const factors = rows.map(r => `<span style="background:${BAR_COLORS[r.key]};width:${Math.max(4, pct(p[r.key], r.max) / rows.length)}%"></span>`).join('')
+    return `<div class="all-score-row">
+      <span class="all-score-name">${esc(profLabel(p.name))}</span>
+      <div class="all-score-track"><i style="width:${pct(p.final_score)}%"></i><b>${factors}</b></div>
+      <span class="all-score-pct">${pct(p.final_score)}%</span>
+    </div>`
+  }).join('')
+
+  const scoreCircles = sorted.map(p => {
+    const score = pct(p.final_score)
+    return `<div class="score-circle">
+      <div class="circle" style="--score:${score * 3.6}deg"><span>${score}%</span></div>
+      <strong>${esc(profLabel(p.name))}</strong>
+    </div>`
+  }).join('')
+
+  const gapRows = sorted.map(p => {
+    const summary = getProfessionRoadmapSummary(results, p.name)
+    const total = sumSkillCount(summary.full)
+    const gap = sumSkillCount(summary.gap)
+    const known = Math.max(total - gap, 0)
+    const completion = total ? Math.round(known / total * 100) : 0
+    return `<div class="gap-row">
+      <span>${esc(profLabel(p.name))}</span>
+      <div class="gap-track"><i style="width:${completion}%"></i></div>
+      <b>${known}/${total}</b>
+    </div>`
+  }).join('')
+
+  const explainRows = rows
+    .filter(r => activeProf?.[r.key] != null)
+    .map(r => `<div class="explain-row">
+      <span>${esc(r.label)}</span>
+      <div><i style="width:${pct(activeProf[r.key], r.max)}%;background:${BAR_COLORS[r.key]}"></i></div>
+      <b>${pct(activeProf[r.key], r.max)}%</b>
+    </div>`)
+    .join('')
+
   const roadmapSections = Object.entries(roadmapAdapted).map(([cat, skills]) =>
     `<div class="rm-section">
       <div class="rm-cat">
@@ -1001,7 +1580,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
       ${skills.map(s => `<div class="rm-skill">
         <span class="rm-check">□</span>
         <div class="rm-skill-body">
-          <span class="rm-skill-name">${clean(cap(s.skill))}</span>
+          <span class="rm-skill-name">${esc(cap(s.skill))}</span>
           ${s.courses.slice(0, 2).map(c => {
             const rating = c.rating && !isNaN(parseFloat(c.rating))
               ? `<span class="rm-rating">★ ${parseFloat(c.rating).toFixed(1)}</span>`
@@ -1010,8 +1589,8 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
               ? `<span class="rm-reviews">${Number(c.reviews).toLocaleString()} ${t.results.reviews}</span>`
               : ''
             return `<div class="rm-course">
-              <span class="rm-platform">${clean(c.platform)}</span>
-              <span class="rm-title">${clean(c.title)}</span>
+              <span class="rm-platform">${esc(c.platform)}</span>
+              <span class="rm-title">${esc(c.title)}</span>
               <span class="rm-meta">${rating}${reviews}</span>
             </div>`
           }).join('')}
@@ -1028,7 +1607,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
     : new Date().toLocaleDateString()
 
   const html = `<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Career Roadmap: ${profLabel(top_profession)}</title>
+  <title>${t.results.pdfRoadmap}: ${esc(profLabel(top_profession))}</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:-apple-system,Segoe UI,sans-serif;color:#1e1e1c;font-size:13px;line-height:1.5}
@@ -1040,12 +1619,42 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
     .prof-sub{font-size:12px;color:#888;margin-bottom:18px}
     .section-title{font-size:9px;font-weight:700;letter-spacing:0.1em;color:#999;text-transform:uppercase;font-family:monospace;margin-bottom:10px}
     .scores{margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid #eee}
+    .score-circles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
+    .score-circle{display:flex;align-items:center;gap:8px;padding:8px;border:1px solid #eee;border-radius:8px;break-inside:avoid}
+    .circle{width:38px;height:38px;border-radius:50%;background:conic-gradient(#5b8dee var(--score),#e8edf5 0);display:grid;place-items:center;flex-shrink:0}
+    .circle span{width:29px;height:29px;border-radius:50%;background:#fff;display:grid;place-items:center;font-size:9px;font-family:monospace;font-weight:700}
+    .score-circle strong{font-size:10px;line-height:1.25}
+    .all-scores{display:flex;flex-direction:column;gap:7px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid #eee}
+    .all-score-row{display:grid;grid-template-columns:150px 1fr 38px;gap:10px;align-items:center}
+    .all-score-name{font-size:11px;color:#444}
+    .all-score-track{position:relative;height:8px;background:#edf1f7;border-radius:99px;overflow:hidden}
+    .all-score-track>i{position:absolute;inset:0 auto 0 0;background:#5b8dee;border-radius:99px}
+    .all-score-track>b{position:absolute;inset:0;display:flex;opacity:.55}
+    .all-score-track>b span{display:block;height:100%}
+    .all-score-pct{font-size:11px;font-family:monospace;text-align:right}
     .score-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
     .score-label{font-size:11px;color:#666;font-family:monospace;min-width:130px}
     .score-bar-wrap{flex:1;display:flex;align-items:center;gap:8px}
     .score-bar{flex:1;height:5px;background:#eee;border-radius:3px;overflow:hidden}
     .score-fill{height:100%;border-radius:3px}
     .score-pct{font-size:11px;font-family:monospace;color:#444;min-width:34px;text-align:right}
+    .explain-copy{font-size:12px;color:#555;margin-bottom:10px}
+    .explain{display:flex;flex-direction:column;gap:7px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid #eee}
+    .explain-row{display:grid;grid-template-columns:130px 1fr 34px;gap:10px;align-items:center}
+    .explain-row span{font-size:11px;color:#555}
+    .explain-row div{height:6px;background:#eee;border-radius:99px;overflow:hidden}
+    .explain-row i{display:block;height:100%;border-radius:99px}
+    .explain-row b{font-size:11px;font-family:monospace;text-align:right}
+    .gap-summary{display:flex;flex-direction:column;gap:7px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid #eee}
+    .gap-row{display:grid;grid-template-columns:150px 1fr 42px;gap:10px;align-items:center}
+    .gap-row span{font-size:11px}
+    .gap-row b{font-size:11px;font-family:monospace;text-align:right}
+    .gap-track{height:7px;background:#edf1f7;border-radius:99px;overflow:hidden}
+    .gap-track i{display:block;height:100%;background:#4caf82;border-radius:99px}
+    .progress-line{display:flex;align-items:center;gap:12px;margin-bottom:20px;padding:10px;border:1px solid #eee;border-radius:8px}
+    .progress-line span{font-size:12px;font-weight:600;min-width:170px}
+    .progress-line i{flex:1;height:8px;background:#edf1f7;border-radius:99px;overflow:hidden}
+    .progress-line b{display:block;height:100%;background:#5b8dee;border-radius:99px}
     .rm-section{margin-bottom:20px;break-inside:avoid}
     .rm-cat{font-size:9px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;font-family:monospace;color:#5b8dee;background:#f0f4ff;padding:5px 10px;border-radius:4px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
     .rm-count{font-weight:400;opacity:0.7;font-size:9px}
@@ -1064,17 +1673,27 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   </style></head>
   <body>
     <div class="header">
-      <span class="header-title">Build Career — Career Roadmap</span>
-      <span class="header-sub">${headerSub}</span>
+      <span class="header-title">CareerPath - ${t.results.pdfRoadmap}</span>
+      <span class="header-sub">${esc(headerSub)}</span>
     </div>
     <div class="body">
-      <div class="prof-name">${profLabel(top_profession)}</div>
+      <div class="prof-name">${esc(profLabel(top_profession))}</div>
       <div class="prof-sub">${t.results.pdfSubtitle}</div>
+      <div class="section-title">${t.results.pdfAllScores}</div>
+      <div class="score-circles">${scoreCircles}</div>
+      <div class="all-scores">${allScoreLines}</div>
       <div class="section-title">${t.results.pdfScores}</div>
       <div class="scores">${scoreLines}</div>
+      <div class="section-title">${t.results.pdfExplain}</div>
+      <div class="explain-copy">${esc(t.results.whyTop ? t.results.whyTop(profLabel(activeProf.name)) : '')}</div>
+      <div class="explain">${explainRows}</div>
+      <div class="section-title">${t.results.pdfSkillGap}</div>
+      <div class="gap-summary">${gapRows}</div>
+      <div class="section-title">${t.results.pdfProgress}</div>
+      <div class="progress-line"><span>${esc(t.results.roadmapProgress(doneRoadmapSteps, totalRoadmapSteps))}</span><i><b style="width:${totalRoadmapSteps ? Math.round(doneRoadmapSteps / totalRoadmapSteps * 100) : 0}%"></b></i></div>
       <div class="section-title">${t.results.pdfRoadmap}</div>
       ${roadmapSections}
-      <div class="footer">Generated by Build Career · buildcareer.app</div>
+      <div class="footer">${t.results.pdfGenerated}</div>
     </div>
   </body></html>`
 
@@ -1094,7 +1713,16 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
   const animKey = `${activeProfName}${tab}${cardKey}`
 
   return (
-    <div className={layoutClass}>
+    <div className={layoutClass} style={{ '--chat-w': `${chatSize.width}px` }}>
+      {rightOpen && <button className={styles.chatOverlay} onClick={() => setRightOpen(false)} aria-label={t.results.closeAiPanel} />}
+      {!rightOpen && (
+        <button className={styles.aiFab} onClick={() => setRightOpen(true)}>
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          {t.results.openAiPanel}
+        </button>
+      )}
       {/* ─ LEFT TOGGLE ─ */}
       <button
         className={[styles.sidebarToggle, styles.sidebarToggleLeft, !leftOpen ? styles.sidebarToggleLeftClosed : ''].join(' ')}
@@ -1171,7 +1799,30 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
           </div>
         )}
 
+        <div className={styles.sidebarSection}>
+          <div className={styles.sidebarLabel}>{t.results.historyTitle}</div>
+          {history.length === 0 ? (
+            <div className={styles.sidebarEmpty}>{t.results.noHistory}</div>
+          ) : (
+            <div className={styles.historyList}>
+              {history.slice(0, 4).map(item => (
+                <button key={item.id} className={styles.historyItem} onClick={() => openHistoryItem(item)}>
+                  <span>{profLabel(item.selectedProfession || item.top_profession)}</span>
+                  <small>{t.results.savedAt}: {new Date(item.createdAt).toLocaleDateString()}</small>
+                </button>
+              ))}
+            </div>
+          )}
+          {history.length > 0 && (
+            <button className={styles.historyClear} onClick={clearHistory}>{t.results.clearHistory}</button>
+          )}
+        </div>
+
         <div className={styles.sidebarActions}>
+          <button className={styles.actionBtn} onClick={saveCurrentResult}>
+            <CheckIcon size={12}/>
+            {savedCurrent ? t.results.savedResult : t.results.saveResult}
+          </button>
           <button className={styles.actionBtn} onClick={handleCopyRoadmap}>
             {copied === 'roadmap' ? <CheckIcon size={12}/> : <CopyIcon size={12}/>}
             {copied === 'roadmap' ? t.results.copied : t.results.copyRoadmap}
@@ -1193,7 +1844,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
             }
             {pdfLoading ? '...' : t.results.downloadPdf}
           </button>
-          <button className={styles.actionBtnNew} onClick={() => { onNewAnalysis?.(); onBack?.() }}>
+          <button className={styles.actionBtnNew} onClick={() => { onNewAnalysis?.(); onRetry ? onRetry() : onBack?.() }}>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M12 5v14M5 12l7-7 7 7"/>
             </svg>
@@ -1220,19 +1871,22 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
           {/* ─ BEST MATCH ─ */}
           {tab === 'best' && activeProf && (() => {
             const rows = orderedRows(ALL_SCORE_ROWS, 'score')
+            const activeRank = Math.max(1, sorted.findIndex(p => p.name === activeProf.name) + 1)
             return (
+              <div className={styles.bestStack}>
               <div className={styles.bestCard}>
                 <div className={styles.bestHeader}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <ProgressRing value={activeProf.final_score ?? 0} size={72} stroke={5}
-                      color="#5b8dee" animKey={animKey}/>
+                      color="#5b8dee" animKey={animKey}
+                      tooltipText={`${profLabel(activeProf.name)}\n${t.results.scoreOverview}: ${pct(activeProf.final_score)}%`}/>
                     <div>
-                      <div className={styles.bestRank}>#{1} {t.results.bestMatch}</div>
+                      <div className={styles.bestRank}>#{activeRank} {activeProf.name === top_profession ? t.results.bestMatch : t.results.selectedProfession}</div>
                       <div className={styles.bestName}>{profLabel(activeProf.name)}</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
-                    <span className={styles.topBadge}>{t.results.bestMatch.toUpperCase()}</span>
+                    {activeProf.name === top_profession && <span className={styles.topBadge}>{t.results.bestMatch.toUpperCase()}</span>}
                     <div style={{ display: 'flex', gap: 4 }}>
                       {['bars', 'radar', 'gap'].map(m => (
                         <button key={m} onClick={() => setViewMode(m)} style={{
@@ -1251,11 +1905,20 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                 </div>
 
                 {viewMode === 'bars' && (
-                  <ProfScores p={activeProf} rows={rows} animKey={animKey} lang={lang}/>
+                  <div className={styles.chartStack}>
+                    <ProfessionBarsChart professions={sorted} rows={rows} profLabel={profLabel} t={t} animKey={animKey} onSelect={handleSelectProf}/>
+                    <div className={styles.activeMetricPanel}>
+                      <div className={styles.compareHeader}>
+                        <span>{profLabel(activeProf.name)}</span>
+                        <small>{t.results.factors}</small>
+                      </div>
+                      <ProfScores p={activeProf} rows={rows} animKey={animKey} lang={lang}/>
+                    </div>
+                  </div>
                 )}
                 {viewMode === 'radar' && (
                   <div style={{ display: 'flex', gap: 24, alignItems: 'center', padding: '16px 0 8px', flexWrap: 'wrap' }}>
-                    <RadarChart data={activeProf} animKey={animKey} lang={lang}/>
+                    <MultiProfessionRadar professions={sorted} profLabel={profLabel} rows={rows} t={t} animKey={animKey}/>
                     <MetricBars data={activeProf} rows={rows} animKey={animKey} lang={lang}/>
                   </div>
                 )}
@@ -1268,7 +1931,8 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                         display: 'flex', gap: 24, alignItems: 'center',
                         padding: '16px 0 8px', flexWrap: 'wrap',
                       }}>
-                        <SkillGapRadar results={results} formData={results._formData} animKey={animKey} lang={lang} />
+                        <SkillGapComparison professions={sorted} results={results} profLabel={profLabel} t={t} onSelect={handleSelectProf}/>
+                        <SkillGapRadar results={results} formData={results._formData} profession={activeProf.name} animKey={animKey} lang={lang} />
                         <MetricBars data={activeProf} rows={rows} animKey={animKey} lang={lang} />
                       </div>
                   </div>
@@ -1282,6 +1946,8 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                     </div>
                   </div>
                 )}
+              </div>
+              <ExplainabilityPanel profession={activeProf} rows={rows} profLabel={profLabel} t={t}/>
               </div>
             )
           })()}
@@ -1298,6 +1964,11 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                   </button>
                 ))}
               </div>
+              <ScoreCircleGrid professions={sorted} rows={ALL_SCORE_ROWS} profLabel={profLabel} t={t} onSelect={handleSelectProf}/>
+              <div className={styles.allCharts}>
+                <ProfessionBarsChart professions={sorted} rows={orderedRows(ALL_SCORE_ROWS, sortBy)} profLabel={profLabel} t={t} animKey={`${sortBy}${cardKey}`} onSelect={handleSelectProf}/>
+                <SkillGapComparison professions={sorted} results={results} profLabel={profLabel} t={t} onSelect={handleSelectProf}/>
+              </div>
               <div className={styles.allGrid}>
                 {sorted.map((p, i) => {
                   const rows = orderedRows(ALL_SCORE_ROWS, sortBy)
@@ -1307,7 +1978,8 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                       <div className={styles.profHeader}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                           <ProgressRing value={p.final_score ?? 0} size={40} stroke={3}
-                            color={BAR_COLORS.skill_match} animKey={aKey}/>
+                            color={BAR_COLORS.skill_match} animKey={aKey}
+                            tooltipText={`${profLabel(p.name)}\n${t.results.scoreOverview}: ${pct(p.final_score)}%`}/>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span className={styles.profRank}>#{i+1}</span>
                             <span className={styles.profName}>{profLabel(p.name)}</span>
@@ -1337,8 +2009,16 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
     <p className={styles.roadmapHint}>
       {t.results.skillsToLearn} <strong>{profLabel(top_profession)}</strong>
     </p>
+    <div className={styles.roadmapProgressPanel}>
+      <span>{t.results.roadmapProgress(doneRoadmapSteps, totalRoadmapSteps)}</span>
+      <div className={styles.roadmapProgressTrack}>
+        <i style={{ width: `${totalRoadmapSteps ? Math.round(doneRoadmapSteps / totalRoadmapSteps * 100) : 0}%` }}/>
+      </div>
+    </div>
+    <p className={styles.dragHint}>{t.results.dragHint}</p>
+    <SkillDependencyTree roadmap={roadmapAdapted} doneSkills={doneSkills} formSkills={results._formData?.skills} t={t}/>
     <div className={styles.roadmap}>
-      {Object.entries(roadmapAdapted).map(([cat, skills]) => {
+      {orderedRoadmapEntries.map(([cat, skills]) => {
         const isOpen = openCats.has(cat)
 
         // Sorting: uncompleted at top, completed at bottom
@@ -1349,9 +2029,21 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
         })
 
         const doneCount = skills.filter(s => doneSkills.has(`${cat}::${s.skill}`)).length
+        const firstCompletedIndex = sorted.findIndex(s => doneSkills.has(`${cat}::${s.skill}`))
 
         return (
-          <div key={cat} className={styles.roadmapCat}>
+          <div
+            key={cat}
+            className={styles.roadmapCat}
+            draggable
+            onDragStart={() => setDragItem({ type: 'category', cat })}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => {
+              e.preventDefault()
+              if (dragItem?.type === 'category') moveCategory(dragItem.cat, cat)
+              setDragItem(null)
+            }}
+          >
             <button className={styles.catHeader} onClick={() => toggleCat(cat)}>
               <span className={styles.catIcon}>{CATEGORY_ICONS[cat] || '◎'}</span>
               <span className={styles.catName}>{catLabel(cat).toUpperCase()}</span>
@@ -1376,8 +2068,27 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                   const isDone = doneSkills.has(`${cat}::${s.skill}`)
                   const visibleCourses = filterCoursesByLanguage(s.courses, lang)
                   return (
-                    <div key={i} className={styles.skillItem}
-                      style={{ opacity: isDone ? 0.45 : 1, transition: 'opacity 0.2s ease' }}>
+                    <div
+                      key={s.skill}
+                      className={styles.skillItemWrap}
+                      draggable
+                      onDragStart={e => {
+                        e.stopPropagation()
+                        setDragItem({ type: 'skill', cat, skill: s.skill })
+                      }}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        if (dragItem?.type === 'skill' && dragItem.cat === cat) moveSkill(cat, dragItem.skill, s.skill)
+                        setDragItem(null)
+                      }}
+                    >
+                    {firstCompletedIndex === i && (
+                      <div className={styles.completedDivider}>{t.results.completedSteps}</div>
+                    )}
+                    <div className={styles.skillItem}
+                      style={{ opacity: isDone ? 0.55 : 1, transition: 'opacity 0.2s ease' }}>
                       <div className={styles.skillTopRow}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
                         {/* Clickable checkbox */}
@@ -1446,6 +2157,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                         </div>
                       )}
                     </div>
+                    </div>
                   )
                 })}
               </div>
@@ -1460,13 +2172,19 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
       </main>
 
       {/* ─ RIGHT CHAT ─ */}
-      <aside className={styles.chatSidebar}>
+      <aside className={styles.chatSidebar} style={{ width: chatSize.width }}>
+        <span className={styles.chatResizeHandle} onMouseDown={startChatResize}/>
         <div className={styles.chatHeader}>
           <div className={styles.chatDot}/>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
           </svg>
           <span className={styles.chatTitle}>{t.results.chatTitle}</span>
+          <button className={styles.chatCloseBtn} onClick={() => setRightOpen(false)} title={t.results.closeAiPanel}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </div>
 
         <div className={styles.chatMessages}>
@@ -1492,11 +2210,10 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
                 <div className={`${styles.msgBubble} ${m.streaming ? styles.msgStreaming : ''}`}>
                   {m.content}
                   {m.streaming && !m.content && (
-                    <span style={{
-                      display: 'inline-block', width: 2, height: '0.9em',
-                      background: 'var(--accent)', marginLeft: 2,
-                      verticalAlign: 'text-bottom', animation: 'blink 1s step-end infinite',
-                    }}/>
+                    <span className={styles.thinkingStatus}>
+                      {t.results.analyzing}
+                      <span className={styles.thinkingDots}><i/><i/><i/></span>
+                    </span>
                   )}
                 </div>
                 {!m.streaming && m.content && (
@@ -1526,7 +2243,7 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
           )}
 
           {/* Typing */}
-          {chatLoading && messages[messages.length - 1]?.content === '' && (
+          {chatLoading && messages[messages.length - 1]?.content === '' && !messages[messages.length - 1]?.streaming && (
             <div className={`${styles.msg} ${styles.msgAi}`}>
               <div className={styles.msgBubble}>
                 <div className={styles.typing}><span/><span/><span/></div>
@@ -1539,7 +2256,27 @@ export default function Results({ results, formData, onBack, onNewAnalysis }) {
         <div className={styles.chatBottom}>
           <div className={styles.chatToolbar}>
             <DeepModeBtn active={deepMode} onClick={() => setDeepMode(v => !v)} lang={lang} t={t}/>
+            <button
+              className={`${styles.voiceBtn} ${listening ? styles.voiceBtnActive : ''}`}
+              onClick={listening ? stopVoiceInput : startVoiceInput}
+              title={listening ? t.results.voiceStop : t.results.voiceRecord}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                <line x1="12" y1="19" x2="12" y2="23"/>
+                <line x1="8" y1="23" x2="16" y2="23"/>
+              </svg>
+            </button>
+            <button className={styles.voiceBtn} onClick={speakLastAnswer} title={t.results.voicePlay}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              </svg>
+            </button>
           </div>
+          <div className={styles.chatScope}>{voiceNotice || t.results.assistantScope}</div>
           <div className={styles.chatInput}>
             <textarea
               ref={textareaRef}

@@ -55,3 +55,19 @@ export async function sendChatStream(payload, signal) {
 
   return res;
 }
+
+export async function parseResume(file) {
+  const res = await fetch(`${BASE}/parse-resume`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Filename': encodeURIComponent(file.name || 'resume'),
+    },
+    body: await file.arrayBuffer(),
+  })
+  if (!res.ok) {
+    const text = await res.text()
+    throw new Error(text || `API error: ${res.status}`)
+  }
+  return res.json()
+}

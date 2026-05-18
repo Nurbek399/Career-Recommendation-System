@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp } from '../context/AppContext'
+import { parseResume } from '../utils/api'
 import styles from './Form.module.css'
 
 const TECH_SKILLS = [
@@ -42,6 +43,19 @@ const SKILL_SUGGESTIONS = [
   'API Design', 'REST', 'GraphQL', 'Microservices', 'System Design', 'Agile', 'Scrum',
 ]
 
+const ROLE_PATTERNS = [
+  'Data Scientist',
+  'Data Analyst',
+  'Data Engineer',
+  'Business Analyst',
+  'Machine Learning Engineer',
+  'Software Engineer',
+  'Cloud Engineer',
+  'Frontend Developer',
+  'Backend Developer',
+  'Full Stack Developer',
+]
+
 const DEFAULT = {
   skills: [], gpa: '', field_of_study: 'Computer Science',
   python: 0, java: 0, c_cpp: 0, sql: 0, machine_learning: 0,
@@ -67,10 +81,14 @@ export default function Form({ onSubmit, loading }) {
   const [rightOpen,  setRightOpen]  = useState(true)
   const [acVisible,  setAcVisible]  = useState(false)  // autocomplete dropdown
   const [acIndex,    setAcIndex]    = useState(-1)      // selected item in dropdown
+  const [parsedResume, setParsedResume] = useState({ skills: [], role: '', fileName: '' })
+  const [resumeNotice, setResumeNotice] = useState('')
+  const [resumeLoading, setResumeLoading] = useState(false)
 
   const tipTimer   = useRef(null)
   const acRef      = useRef(null)
   const inputRef   = useRef(null)
+  const resumeRef  = useRef(null)
 
   const tips = t.form.tips
 
@@ -109,6 +127,18 @@ export default function Form({ onSubmit, loading }) {
     setAcVisible(false)
     setAcIndex(-1)
     inputRef.current?.focus()
+  }
+
+  const mergeSkills = (skills) => {
+    const current = new Set(form.skills.map(x => x.toLowerCase()))
+    const next = [...form.skills]
+    skills.forEach(skill => {
+      if (!current.has(skill.toLowerCase())) {
+        current.add(skill.toLowerCase())
+        next.push(skill)
+      }
+    })
+    set('skills', next)
   }
 
   const removeSkill = (s) => set('skills', form.skills.filter(x => x !== s))
@@ -162,6 +192,91 @@ export default function Form({ onSubmit, loading }) {
     e.preventDefault()
     if (!validate()) return
     onSubmit({ ...form, gpa: Number(form.gpa), lang })
+  }
+
+  const parseResumeText = (text) => {
+    const normalized = text.replace(/\s+/g, ' ')
+    const safeRules = [
+      ['Python', /\bpython\b/i],
+      ['JavaScript', /\bjavascript\b|\bjs\b/i],
+      ['TypeScript', /\btypescript\b|\bts\b/i],
+      ['Java', /\bjava\b/i],
+      ['C++', /\bc\+\+\b|\bcpp\b/i],
+      ['C#', /\bc#\b|\bcsharp\b/i],
+      ['Go', /\bgolang\b|\bgo\s+(developer|engineer|language|programming)\b/i],
+      ['R', /\br\s+(programming|language)\b|\brstudio\b|\btidyverse\b|\bggplot2\b|\bdplyr\b/i],
+      ['SQL', /\bsql\b/i],
+      ['PostgreSQL', /\bpostgresql\b|\bpostgres\b/i],
+      ['MySQL', /\bmysql\b/i],
+      ['MongoDB', /\bmongodb\b|\bmongo\b/i],
+      ['Machine Learning', /\bmachine\s+learning\b|\bml\b/i],
+      ['Data Analysis', /\bdata\s+analysis\b|\banalytics\b/i],
+      ['Pandas', /\bpandas\b/i],
+      ['NumPy', /\bnumpy\b/i],
+      ['scikit-learn', /\bscikit[-\s]?learn\b|\bsklearn\b/i],
+      ['TensorFlow', /\btensorflow\b/i],
+      ['PyTorch', /\bpytorch\b/i],
+      ['React', /\breact(?:\.js|js)?\b/i],
+      ['FastAPI', /\bfastapi\b/i],
+      ['Django', /\bdjango\b/i],
+      ['Flask', /\bflask\b/i],
+      ['Docker', /\bdocker\b/i],
+      ['Kubernetes', /\bkubernetes\b|\bk8s\b/i],
+      ['AWS', /\baws\b|\bamazon\s+web\s+services\b/i],
+      ['Azure', /\bazure\b/i],
+      ['GCP', /\bgcp\b|\bgoogle\s+cloud\b/i],
+      ['DevOps', /\bdevops\b|\bci\/cd\b|\bci\s*cd\b/i],
+      ['Git', /\bgit\b|\bgithub\b|\bgitlab\b/i],
+      ['Linux', /\blinux\b/i],
+      ['Networking', /\bnetworking\b|\btcp\/ip\b/i],
+      ['Cybersecurity', /\bcybersecurity\b|\binformation\s+security\b/i],
+      ['Tableau', /\btableau\b/i],
+      ['Power BI', /\bpower\s*bi\b/i],
+      ['Excel', /\bexcel\b/i],
+      ['Airflow', /\bairflow\b/i],
+      ['Spark', /\bspark\b|\bpyspark\b/i],
+      ['Kafka', /\bkafka\b/i],
+      ['REST', /\brest(?:ful)?\b/i],
+      ['GraphQL', /\bgraphql\b/i],
+    ]
+    const detectedSkills = safeRules.filter(([, regex]) => regex.test(normalized)).map(([skill]) => skill)
+    const detectedRole = ROLE_PATTERNS.find(role => new RegExp(role.replace(/\s+/g, '\\s+'), 'i').test(normalized)) || ''
+    return { detectedSkills, detectedRole }
+  }
+
+  const handleResumeUpload = async (file) => {
+    if (!file) return
+    setResumeNotice('')
+    setResumeLoading(true)
+    try {
+      const parsed = await parseResume(file)
+      const detectedSkills = parsed.skills || []
+      const detectedRole = parsed.role || ''
+      setParsedResume({ skills: detectedSkills, role: detectedRole, fileName: file.name })
+      if (detectedSkills.length) mergeSkills(detectedSkills)
+      if (detectedRole && FIELDS.includes(detectedRole)) set('field_of_study', detectedRole)
+      if (!detectedSkills.length) setResumeNotice(t.form.resume.unsupported)
+    } catch (error) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        const text = String(reader.result || '')
+        const { detectedSkills, detectedRole } = parseResumeText(text)
+        setParsedResume({ skills: detectedSkills, role: detectedRole, fileName: file.name })
+        if (detectedSkills.length) mergeSkills(detectedSkills)
+        if (!detectedSkills.length) setResumeNotice(t.form.resume.unsupported)
+      }
+      reader.onerror = () => setResumeNotice(t.form.resume.unsupported)
+      reader.onloadend = () => setResumeLoading(false)
+      reader.readAsText(file)
+      return
+    }
+    setResumeLoading(false)
+  }
+
+  const clearParsedResume = () => {
+    setParsedResume({ skills: [], role: '', fileName: '' })
+    setResumeNotice('')
+    if (resumeRef.current) resumeRef.current.value = ''
   }
 
   const techChecked  = TECH_SKILLS.filter(s => form[s.key] === 1).length
@@ -273,6 +388,56 @@ export default function Form({ onSubmit, loading }) {
           </div>
 
           <form className={styles.form} onSubmit={handleSubmit}>
+
+            {/* ── CV / Resume parser ── */}
+            <div className={styles.section}>
+              <div className={styles.sectionLabel}>{t.form.resume.label}</div>
+              <p className={styles.hint}>{t.form.resume.hint}</p>
+              <div className={styles.resumeBox}>
+                <input
+                  ref={resumeRef}
+                  className={styles.resumeInput}
+                  type="file"
+                  accept=".pdf,.txt,.doc,.docx,text/plain,application/pdf"
+                  onChange={e => handleResumeUpload(e.target.files?.[0])}
+                />
+                <button type="button" className={styles.resumeUploadBtn} onClick={() => resumeRef.current?.click()}>
+                  {resumeLoading ? (
+                    <span className={styles.spinner}/>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                      <polyline points="17 8 12 3 7 8"/>
+                      <line x1="12" y1="3" x2="12" y2="15"/>
+                    </svg>
+                  )}
+                  {resumeLoading ? t.form.submitting : (parsedResume.fileName || t.form.resume.upload)}
+                </button>
+                {(parsedResume.skills.length > 0 || parsedResume.role || resumeNotice) && (
+                  <div className={styles.resumeParsed}>
+                    {parsedResume.role && (
+                      <div className={styles.resumeRole}>
+                        <span>{t.form.resume.role}</span>
+                        <strong>{parsedResume.role}</strong>
+                      </div>
+                    )}
+                    <div className={styles.resumeParsedHeader}>
+                      <span>{t.form.resume.parsed}</span>
+                      <button type="button" onClick={clearParsedResume}>{t.form.resume.clear}</button>
+                    </div>
+                    {parsedResume.skills.length ? (
+                      <div className={styles.sidebarTags}>
+                        {parsedResume.skills.map(skill => (
+                          <span key={skill} className={styles.sidebarTag}>{skill}</span>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className={styles.sidebarEmpty}>{resumeNotice || t.form.resume.empty}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* ── Custom Skills with Autocomplete ── */}
             <div className={styles.section}>

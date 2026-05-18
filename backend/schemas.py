@@ -35,3 +35,4 @@ class ChatRequest(BaseModel):
     history: list[ChatMessage]
     message: str
     deep: bool = False
+    lang: str = 'en'

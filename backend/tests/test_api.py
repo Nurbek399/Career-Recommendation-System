@@ -103,3 +103,26 @@ def test_recommend_rejects_invalid_payload(client):
     response = client.post("/recommend", json=profile)
 
     assert response.status_code == 422
+
+
+def test_resume_parser_avoids_short_token_false_positives(client):
+    response = client.post(
+        "/parse-resume",
+        content=(
+            "I want to go into data science. I work with Python, SQL, MongoDB, "
+            "and TensorFlow. The phrase go forward should not be treated as a Go skill."
+        ).encode("utf-8"),
+        headers={
+            "content-type": "text/plain",
+            "x-filename": "resume.txt",
+        },
+    )
+
+    assert response.status_code == 200
+    skills = response.json()["skills"]
+    assert "Python" in skills
+    assert "SQL" in skills
+    assert "MongoDB" in skills
+    assert "TensorFlow" in skills
+    assert "Go" not in skills
+    assert "R" not in skills

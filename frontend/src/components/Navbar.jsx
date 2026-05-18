@@ -23,7 +23,12 @@ const LogoMark = () => (
 )
 
 export default function Navbar({ onLogoClick }) {
-  const { theme, toggleTheme, toggleLang, t } = useApp()
+  const { theme, toggleTheme, lang, setLanguage, t } = useApp()
+  const languages = [
+    { key: 'en', label: 'EN' },
+    { key: 'ru', label: 'RU' },
+    { key: 'kk', label: 'KZ' },
+  ]
 
   return (
     <nav className={styles.nav}>
@@ -36,7 +41,18 @@ export default function Navbar({ onLogoClick }) {
           <button className={styles.iconBtn} onClick={toggleTheme} title={t.nav.themeToggle || t.nav.theme}>
             {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
           </button>
-          <button className={styles.langBtn} onClick={toggleLang}>{t.nav.lang}</button>
+          <div className={styles.langGroup} aria-label={t.nav.language || 'Language'}>
+            {languages.map(item => (
+              <button
+                key={item.key}
+                className={`${styles.langBtn} ${lang === item.key ? styles.langBtnActive : ''}`}
+                onClick={() => setLanguage(item.key)}
+                aria-pressed={lang === item.key}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     </nav>
