@@ -513,4 +513,4 @@ Best representative model: LightGBM with selected features.
 
 ## License
 
-This repository is currently intended for academic and portfolio demonstration purposes. Add an explicit license before public reuse or distribution.
+This repository is currently intended for academic and portfolio demonstration purposes.
