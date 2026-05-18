@@ -8,7 +8,7 @@
 | --- | --- |
 | Danial Yermekov | https://github.com/danialyermekov |
 | Nurbek Seiilbek | https://github.com/Nurbek399 |
-| Turan Tastan | Not provided |
+| Turan Tastan | https://github.com/another-restless-student23 |
 
 ## Overview
 
