@@ -169,4 +169,19 @@ class CourseFinderService:
                         'courses': self._find_courses_en(skill) if lang == 'en' else self._find_courses_ru(skill)
                     }
 
-            return result, roadmap['full'] 
+            return result, roadmap['full']
+
+    def get_gap_summary_for_all(self, student_skills: list[str]) -> dict:
+        """Return full/gap roadmap summaries for every profession without course lookup."""
+        summaries = {}
+        for profession, profession_profile in self.profession_profiles.items():
+            roadmap = generate_roadmap(
+                profession=profession,
+                student_raw_skills=student_skills,
+                profession_profile=profession_profile,
+            )
+            summaries[profession] = {
+                'full': roadmap.get('full', {}),
+                'gap': roadmap.get('gap', {}),
+            }
+        return summaries

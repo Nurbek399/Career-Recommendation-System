@@ -1,106 +1,92 @@
-# tests/test_recommendations.py
-import httpx
-import pytest
+from top_profession import get_top_profession
 
-BASE_URL = "http://localhost:8000"
 
-# Obvious profiles with clear expected professions
-PROFILES = [
-    (
-        {
-            "skills": ["python", "pandas", "scikit-learn", "machine learning", "deep learning", "pytorch", "tensorflow"],
-            "field_of_study": "Data Science",
-            "gpa": 3.8,
-            "python": 1, "java": 0, "c_cpp": 0, "sql": 1,
-            "machine_learning": 1, "data_analysis": 1, "cloud_computing": 0,
-            "cybersecurity": 0, "web_development": 0, "devops": 0,
-            "networking": 0, "communication": 1, "leadership": 0,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Machine Learning Engineer",  # clear ML focus, strong Python + ML skills
-    ),
-    (
-        {
-            "skills": ["sql", "excel", "power bi", "tableau", "statistics", "data visualization"],
-            "field_of_study": "Business Analytics",
-            "gpa": 3.5,
-            "python": 0, "java": 0, "c_cpp": 0, "sql": 1,
-            "machine_learning": 0, "data_analysis": 1, "cloud_computing": 0,
-            "cybersecurity": 0, "web_development": 0, "devops": 0,
-            "networking": 0, "communication": 1, "leadership": 1,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Data Analyst",  # no ML, strong data viz + business tools + communication
-    ),
-    (
-        {
-            "skills": ["python", "spark", "airflow", "kafka", "postgresql", "etl", "data warehouse", "dbt"],
-            "field_of_study": "Computer Science",
-            "gpa": 3.6,
-            "python": 1, "java": 1, "c_cpp": 0, "sql": 1,
-            "machine_learning": 0, "data_analysis": 0, "cloud_computing": 1,
-            "cybersecurity": 0, "web_development": 0, "devops": 1,
-            "networking": 0, "communication": 0, "leadership": 0,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Data Engineer",  # ETL/pipeline stack
-    ),
-    (
-        {
-            "skills": ["requirements gathering", "bpmn", "jira", "confluence", "sql", "excel", "uml"],
-            "field_of_study": "Information Systems",
-            "gpa": 3.3,
-            "python": 0, "java": 0, "c_cpp": 0, "sql": 1,
-            "machine_learning": 0, "data_analysis": 1, "cloud_computing": 0,
-            "cybersecurity": 0, "web_development": 0, "devops": 0,
-            "networking": 0, "communication": 1, "leadership": 1,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Business Analyst",  # common BA skills + strong communication + some data analysis, no coding focus
-    ),
-    (
-        {
-            "skills": ["aws", "terraform", "docker", "kubernetes", "ci/cd", "linux", "networking"],
-            "field_of_study": "Computer Science",
-            "gpa": 3.4,
-            "python": 1, "java": 0, "c_cpp": 0, "sql": 0,
-            "machine_learning": 0, "data_analysis": 0, "cloud_computing": 1,
-            "cybersecurity": 0, "web_development": 0, "devops": 1,
-            "networking": 1, "communication": 0, "leadership": 0,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Cloud Engineer",  # AWS + DevOps stack
-    ),
-    (
-        {
-            "skills": ["python", "statistics", "r", "hypothesis testing", "ml", "feature engineering", "xgboost"],
-            "field_of_study": "Applied Mathematics",
-            "gpa": 3.9,
-            "python": 1, "java": 0, "c_cpp": 0, "sql": 1,
-            "machine_learning": 1, "data_analysis": 1, "cloud_computing": 0,
-            "cybersecurity": 0, "web_development": 0, "devops": 0,
-            "networking": 0, "communication": 1, "leadership": 0,
-            "problem_solving": 1, "teamwork": 1, "adaptability": 1
-        },
-        "Data Scientist",  # strong stats + ML + Python, but no engineering focus, more research/data insight focus than ML engineering
-    ),
+PROFESSIONS = [
+    "Business Analyst",
+    "Cloud Engineer",
+    "Data Analyst",
+    "Data Engineer",
+    "Data Scientist",
+    "Machine Learning Engineer",
+    "Software Engineer",
 ]
 
 
-@pytest.mark.parametrize("profile, expected_profession", PROFILES)
-def test_top_profession_matches_expected(profile, expected_profession):
-    r = httpx.post(f"{BASE_URL}/recommend", json=profile, timeout=30)
-    assert r.status_code == 200, f"API error: {r.json()}"
+def demand(trend=0.2, market=0.1):
+    return {
+        profession: {
+            "trend_score": trend,
+            "market_share": market,
+            "predicted_vacancies": 1000,
+        }
+        for profession in PROFESSIONS
+    }
 
-    data = r.json()
-    top        = data["top_profession"]
-    alt        = data.get("alternative_profession", "")
-    final      = data.get("final_scores", {})
 
-    assert expected_profession in (top, alt), (
-        f"\nProfile: {profile['skills']}"
-        f"\nExpected: {expected_profession}"
-        f"\nReceived (top-1): {top}"
-        f"\nReceived (top-2): {alt}"
-        f"\nFinal scores: {final}"
+def uniform_scores(value=1.0):
+    return {profession: value for profession in PROFESSIONS}
+
+
+def test_skill_match_can_drive_clear_ml_recommendation():
+    classification_scores = uniform_scores()
+    skill_scores = uniform_scores(0.1)
+    skill_scores["Machine Learning Engineer"] = 0.95
+
+    top, final_scores, top_2 = get_top_profession(
+        classification_scores=classification_scores,
+        demand_scores=demand(),
+        skill_scores=skill_scores,
     )
+
+    assert top == "Machine Learning Engineer"
+    assert top_2[0] == top
+    assert final_scores["Machine Learning Engineer"] > final_scores["Data Scientist"]
+
+
+def test_profile_probability_can_drive_recommendation_when_skills_are_equal():
+    classification_scores = uniform_scores(0.05)
+    classification_scores["Data Analyst"] = 0.70
+    skill_scores = uniform_scores()
+
+    top, final_scores, _ = get_top_profession(
+        classification_scores=classification_scores,
+        demand_scores=demand(),
+        skill_scores=skill_scores,
+    )
+
+    assert top == "Data Analyst"
+    assert final_scores["Data Analyst"] == max(final_scores.values())
+
+
+def test_market_demand_breaks_close_profile_and_skill_tie():
+    classification_scores = uniform_scores()
+    skill_scores = uniform_scores()
+    demand_scores = demand(trend=0.1, market=0.1)
+    demand_scores["Data Engineer"]["trend_score"] = 0.9
+    demand_scores["Data Engineer"]["market_share"] = 0.8
+
+    top, final_scores, _ = get_top_profession(
+        classification_scores=classification_scores,
+        demand_scores=demand_scores,
+        skill_scores=skill_scores,
+    )
+
+    assert top == "Data Engineer"
+    assert final_scores["Data Engineer"] > final_scores["Data Analyst"]
+
+
+def test_zero_scores_do_not_crash_or_create_missing_professions():
+    classification_scores = uniform_scores(0)
+    skill_scores = uniform_scores(0)
+    demand_scores = demand(trend=0, market=0)
+
+    top, final_scores, top_2 = get_top_profession(
+        classification_scores=classification_scores,
+        demand_scores=demand_scores,
+        skill_scores=skill_scores,
+    )
+
+    assert top in PROFESSIONS
+    assert len(top_2) == 2
+    assert set(final_scores) == set(PROFESSIONS)
+    assert all(score == 0 for score in final_scores.values())
