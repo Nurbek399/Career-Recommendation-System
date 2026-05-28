@@ -687,8 +687,4 @@ Best representative model: LightGBM with selected features.
 
 ## License
 
-<<<<<<< HEAD
-This repository is currently intended for academic and portfolio demonstration purposes.
-=======
 This repository is intended for academic and portfolio demonstration purposes. Add an explicit license before public reuse or distribution.
->>>>>>> b3c56f4 (Здарова Бандиты)
